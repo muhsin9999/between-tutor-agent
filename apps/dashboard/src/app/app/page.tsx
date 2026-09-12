@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { roster, type RosterRow } from "@/lib/roster";
 import { WeekBar } from "./_weekbar";
 import { NEED_STYLE, stagger } from "./_need";
+import { AddStudent } from "./add-student";
 
 export const dynamic = "force-dynamic";
 
@@ -42,19 +43,19 @@ export default function RosterPage() {
         )}
       </header>
 
-      {rows.length === 0 ? (
-        <Card className="rise mt-8 p-6" style={stagger(1)}>
-          <p className="font-display text-xl text-cream">Your first student starts in Telegram.</p>
-          <p className="mt-3 max-w-prose text-sm leading-relaxed text-cream-dim">
-            Send a student your enrolment link from the bot, then send one line after their next
-            lesson — &ldquo;Jonas keeps regularising strong verbs&rdquo; is enough. The week builds
-            itself from there, and they appear here the moment it does.
-          </p>
-        </Card>
-      ) : (
-        <ul className="mt-8 flex flex-col gap-2">
+      {/*
+        Add student sits above the roster, always. When the roster is empty this
+        card IS the empty state — a dead end and the way out of it should not be
+        two separate boxes, so there is no second "no students yet" message here.
+      */}
+      <div className="rise mt-8" style={stagger(1)}>
+        <AddStudent empty={rows.length === 0} />
+      </div>
+
+      {rows.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-2">
           {rows.map((row, i) => (
-            <li key={row.id} className="rise" style={stagger(i + 1)}>
+            <li key={row.id} className="rise" style={stagger(i + 2)}>
               <StudentRow row={row} />
             </li>
           ))}
