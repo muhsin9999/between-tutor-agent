@@ -39,7 +39,9 @@ grep -rn "botToken\|polling\|webhook" node_modules/@copilotkit/channels/dist/tel
 > ⏱ **At 12:58 you stop spiking regardless of the answer.** An undecided
 > transport at 13:10 is the single worst state this build can be in.
 
-### A2 · BotFather — **4 minutes, human-only** 🔴 P0
+### A2 · BotFather — **6 minutes, human-only** 🔴 P0
+
+> **Full walkthrough with every prompt and reply: [TELEGRAM-SETUP.md](TELEGRAM-SETUP.md).**
 
 You cannot test the panel *at all* until the Mini App URL is registered, and you
 cannot get a URL without a tunnel. Do all of it in one sitting:

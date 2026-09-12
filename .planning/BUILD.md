@@ -17,6 +17,7 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 | File | What it is | When you read it |
 |---|---|---|
 | **[GATE-0.md](GATE-0.md)** | Pre-flight. Nothing else starts until this passes. | **Now** |
+| **[TELEGRAM-SETUP.md](TELEGRAM-SETUP.md)** | BotFather, step by step. Bot + Mini App URL. | Gate 0 A2 |
 | **[CONTRACTS.md](CONTRACTS.md)** | The two frozen data shapes. Single source of truth. | Gate 0, then never edit |
 | **[LANE-A.md](LANE-A.md)** | A's tasks — Telegram, both chats, the panel shell | After Gate 0 |
 | **[LANE-B.md](LANE-B.md)** | B's tasks — planning, revision, composition | After Gate 0 |
