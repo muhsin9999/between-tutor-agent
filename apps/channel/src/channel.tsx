@@ -36,7 +36,21 @@ import { extractVoice } from "./voice";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
-const PANEL_URL = `${process.env.PUBLIC_APP_URL ?? "http://127.0.0.1:3100"}/panel`;
+/**
+ * The tutor's panel, behind the "Open the lesson brief" button.
+ *
+ * `||` not `??`: an env var set to an EMPTY STRING is not nullish, so `??`
+ * would keep it and the button would read "/panel" with no origin. That is the
+ * same trap CHANNEL_CODE fell into earlier today.
+ *
+ * The fallback is the deployed panel, not localhost. A bot running on Render
+ * with PUBLIC_APP_URL unset would otherwise hand the tutor a link to a machine
+ * that is not hers — and a dead button is the one thing that cannot be
+ * explained away on camera.
+ */
+const PANEL_ORIGIN =
+  (process.env.PUBLIC_APP_URL || "https://between-panel.vercel.app").replace(/\/+$/, "");
+const PANEL_URL = `${PANEL_ORIGIN}/panel`;
 const pendingEnrollments = new Map<number, { tutorChatId: number }>();
 
 async function studentNamed(line: string) {
