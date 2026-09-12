@@ -1,68 +1,95 @@
-import { createChannel } from "@copilotkit/channels";
-import { isSearchConfigured, isWorkplaceConfigured, WORKPLACE_CONTEXT } from "agent-core";
+/**
+ * T-A1 — the Telegram channel. Both legs of Between live here.
+ *
+ * ONE bot, TWO roles, fanned out on who is talking:
+ *   - the tutor  → sends one line a week, gets an enrolment link and a panel button
+ *   - a student  → gets one question at a time, in plain chat, forever
+ *
+ * The student NEVER gets a panel or a webview. ≤8 choices render as a native
+ * Telegram inline keyboard and stay in the conversation. The product's premise
+ * is that he will not open a practice app — that is *why* the six days are
+ * empty — so a panel on his leg would rebuild the exact failure it exists to fix.
+ *
+ * Transport: the direct adapter path. `telegram({ token })` defaults to
+ * long-polling over grammY, so there is no public URL, no webhook and no
+ * Intelligence key involved. (The tunnel in .env is for the tutor's Mini App,
+ * which is a different surface entirely.)
+ */
+import { createChannel, Message, Section, Markdown, Actions, Button } from "@copilotkit/channels";
+import { telegram } from "@copilotkit/channels/telegram";
 import { makeChannelAgent } from "./agent";
 import { required } from "./env";
-import { IncidentCard, Timeline, welcomeMessage } from "./components";
-import { proposeAction, readThread, searchTheWeb } from "./tools";
 
-// Tools are registered only when their credential is present, so the agent is
-// never handed a tool that will fail when it calls it.
-const tools = [
-  readThread,
-  proposeAction,
-  ...(isSearchConfigured() ? [searchTheWeb] : []),
-];
+const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
+const PANEL_URL = `${process.env.PUBLIC_APP_URL ?? "http://127.0.0.1:3100"}/panel`;
 
 export const channel = createChannel({
-  // Must equal the Channel Code in Intelligence, character for character. A
-  // mismatch leaves the Channel at "Waiting for runtime" and is validated at
-  // startup, not here.
-  name: required("CHANNEL_CODE"),
-
-  // Required. "platform" derives the canonical user from provider + workspace +
-  // platform user id. Do NOT move this onto CopilotRuntime — that one is for
-  // web requests and must be absent on a Channels-only runtime.
+  // No `name` — that is the Intelligence Channel Code, and this is a direct
+  // adapter. `identifyUser` still belongs here and NOT on CopilotRuntime.
   identifyUser: "platform",
 
-  agent: makeChannelAgent,
-  tools,
-  components: [IncidentCard, Timeline],
+  adapters: [
+    telegram({
+      token: required("TELEGRAM_BOT_TOKEN"),
+      // "polling" is the default; stated so nobody later assumes a webhook.
+      mode: "polling",
+      greeting:
+        "I'm Between. Your tutor sets the week; I keep you company through it.\n\n" +
+        "If you have a link from your tutor, tap it to start.",
+    }),
+  ],
 
-  // Injected into the agent's prompt on every run.
+  agent: makeChannelAgent,
+
   context: [
-    
-    {
-      description: "Rendering",
-      value:
-        "You can draw native UI by calling incident_card or timeline. Prefer them over prose whenever the answer has structure.",
-    },
-    ...(isWorkplaceConfigured()
-      ? [{ description: "Workplace", value: WORKPLACE_CONTEXT }]
-      : []),
     {
       description: "Surface",
       value:
-        "This is a chat thread in a channel people are actively working in. Assume others are reading and that some joined late.",
+        "This is a one-to-one Telegram chat on a phone, often read on a bus. " +
+        "One question at a time. Never a wall of text, never a numbered list of five things. " +
+        "Two short lines is a long message here.",
     },
   ],
-
 });
 
-// A mention subscribes the conversation, so the agent then follows along instead
-// of needing to be @-mentioned every single turn.
-channel.onMention(async ({ thread }) => {
-  await thread.subscribe();
-  await thread.runAgent();
+/* ── the tutor ───────────────────────────────────────────────────────────── */
+
+channel.onCommand("tutor", async (ctx) => {
+  await ctx.thread.post(
+    <Message accent="#16306B">
+      <Section>
+        <Markdown>
+          {`You're set up as the tutor.\n\n` +
+            `Send me one line at the end of a lesson — who, what, and anything human ` +
+            `about how it went. I'll plan their six days and have a briefing ready ` +
+            `five minutes before you next sit down.\n\n` +
+            `Share this with a student to enrol them:\n` +
+            `https://t.me/${BOT_USERNAME}?start=demo`}
+        </Markdown>
+      </Section>
+      <Actions>
+        <Button url={PANEL_URL}>Open the lesson brief</Button>
+      </Actions>
+    </Message>,
+  );
 });
 
-// Non-mentioned turns only ever reach onMessage — gate them on the flag or the
-// agent will answer every message in every channel it has been invited to.
+/* ── everyone ────────────────────────────────────────────────────────────── */
+
+channel.onWelcome(async ({ thread }) => {
+  await thread.post(
+    <Message accent="#F5A623">
+      <Section>
+        <Markdown>
+          {`I'm **Between**.\n\n` +
+            `Your tutor sets the week. I'll keep you company through it — ` +
+            `about ten minutes a day, right here.`}
+        </Markdown>
+      </Section>
+    </Message>,
+  );
+});
+
 channel.onMessage(async ({ thread }) => {
-  if (await thread.isSubscribed()) {
-    await thread.runAgent();
-  }
-});
-
-channel.onWelcome(async ({ thread, platform }) => {
-  await thread.post(welcomeMessage(platform));
+  await thread.runAgent();
 });
