@@ -28,6 +28,7 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 | **[STATUS.md](STATUS.md)** | Live board. Both of you edit it. | Every 20 minutes |
 | **[STRETCH.md](STRETCH.md)** | What to add in the last 35 minutes, and what not to | 14:30 |
 | **[SURFACES.md](SURFACES.md)** | Who else this product has to meet — the parent gap first | After the deadline |
+| **[ONBOARDING.md](ONBOARDING.md)** | How a tutor and a student actually start — and the parent gate | After the deadline |
 | **[DASHBOARD.md](DASHBOARD.md)** | The tutor's standalone web app — spec, schema, routes | After the deadline |
 | **[AUTH.md](AUTH.md)** | Better Auth on the browser door; Telegram keeps its own | After the deadline |
 | **[HOSTING.md](HOSTING.md)** | Getting off the laptop: Vercel + a container host + Neon | After the deadline |
