@@ -119,6 +119,23 @@ export function LinkTelegram({ connected, telegramUserId, linkedAt }: LinkTelegr
             Connect it and the bot you already teach with becomes yours — one tutor, whether you
             come in through Telegram or through this tab.
           </p>
+          {/*
+            Name the bot. "Connect Telegram" on its own tells her nothing about
+            WHICH account to look for, and searching Telegram for the wrong one
+            is how she ends up messaging somebody else's bot.
+          */}
+          <p className="mt-3 text-sm text-cream-dim">
+            The bot is{" "}
+            <a
+              href="https://t.me/between_tutor_bot"
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-amber underline underline-offset-2 transition-[color] duration-[160ms] ease-[var(--ease-out-strong)] hover:text-amber-soft"
+            >
+              @between_tutor_bot
+            </a>{" "}
+            — search that name in Telegram, or tap the button and we will open it for you.
+          </p>
         </div>
         <Badge tone="neutral">Not connected</Badge>
       </div>
