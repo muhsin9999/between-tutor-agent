@@ -10,6 +10,19 @@
 import { Message, Section, Markdown, Context } from "@copilotkit/channels";
 import { planWeek, nextStep, recordStudentTurn, store } from "agent-core";
 import type { PlanDay } from "agent-core/contracts";
+import { explainMiss, shouldExplain } from "./explain";
+import { downloadVoice, VOICE_FILENAME, type VoiceNote } from "./voice";
+// Reached by path, not by barrel: agent-core's `exports` map publishes ".",
+// "./shared" and "./contracts" only, and transcribe.ts is behind none of them.
+// Adding an entry would mean editing agent-core, which is somebody else's file
+// right now. The module is pure — bytes in, a string out — so a second
+// specifier for it costs nothing.
+import {
+  normalizeSpeech,
+  transcribeVoice,
+  uploadFilename,
+  vocabularyHint,
+} from "../../../packages/agent-core/src/transcribe";
 
 /** The demo runs one student. Fixtures name him; see .planning/FIXTURES.md. */
 export const STUDENT_ID = "jonas";
@@ -151,16 +164,24 @@ function hash(value: string): number {
   return Math.abs(h);
 }
 
+/**
+ * `heard` is the transcript of a spoken answer, and is set ONLY by the voice
+ * path. It changes nothing about grading — `text` is already the transcript by
+ * the time it arrives here — it is echoed back in the reply so a mis-heard
+ * answer is a visible one. A typed turn passes it undefined and is byte-for-byte
+ * the turn it always was.
+ */
 export async function handleStudentAnswer(
   thread: Thread,
   text: string,
   message?: unknown,
+  heard?: string,
 ): Promise<void> {
   if (message !== undefined && isDuplicate(message)) return;
-  return serialize(STUDENT_ID, () => studentTurn(thread, text));
+  return serialize(STUDENT_ID, () => studentTurn(thread, text, heard));
 }
 
-async function studentTurn(thread: Thread, text: string): Promise<void> {
+async function studentTurn(thread: Thread, text: string, heard?: string): Promise<void> {
   const plan = store.latestPlan(STUDENT_ID);
   const step = store.dueStep(STUDENT_ID);
 
@@ -218,10 +239,33 @@ async function studentTurn(thread: Thread, text: string): Promise<void> {
   await thread.post(
     <Message accent={attempt.correct ? "#2E7D4F" : "#F5A623"}>
       <Section>
-        <Markdown>{reply}</Markdown>
+        <Markdown>{heard ? `Heard: \`${heard}\`\n\n${reply}` : reply}</Markdown>
       </Section>
     </Message>,
   );
+
+  // T-A6 · WHY, in the chat — but only AFTER the reply has landed.
+  //
+  // On a phone the order is the whole design: the short human sentence he
+  // answers, then the grid that explains it, then the revision, then the next
+  // question. A table arriving first turns a warm correction into a mark sheet,
+  // and he reads the grid before he reads the answer.
+  //
+  // `shouldExplain` is the gate, not this call: it fires on two misses carrying
+  // one tag inside one plan version — the same threshold evidence.ts revises
+  // on — so the table and the revision land as one event. Everything is wrapped
+  // because an explanation is a nicety and his turn is not: a throw in here must
+  // never cost him the reply he already has, or the next question below.
+  try {
+    const attempts = store.attemptsFor(STUDENT_ID);
+    if (shouldExplain(attempts, step)) {
+      await thread.post(explainMiss({ step, gave: attempt.gave, attempts }));
+    }
+  } catch (error) {
+    console.warn(
+      `[explain] skipped for day ${step.day}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 
   // The revision is the beat the whole demo turns on, so it is visible to the
   // student in one quiet line rather than happening silently behind the panel.
@@ -247,4 +291,83 @@ async function studentTurn(thread: Thread, text: string): Promise<void> {
     outstanding.set(STUDENT_ID, { version: current.version, day: next.day });
     await thread.post(ask(next));
   }
+}
+
+/* ── T-A5 · the same turn, spoken ────────────────────────────────────────── */
+
+/**
+ * The vocabulary hint, built from the WEEK — every target item in the current
+ * plan, not today's `expects`.
+ *
+ * Measured in transcribe.ts and the reason this helper exists at all: without a
+ * hint, one-word German answers mostly come back wrong ("ging" → "Ding"). With
+ * only today's answer in the hint you fix that by biasing the decoder toward
+ * the one string that scores a point, which manufactures correct grades. All six
+ * verbs together still resolved to the one actually spoken, and never turned a
+ * wrong answer into the right one — so the whole set goes in, or nothing does.
+ */
+function weekHint(): string | undefined {
+  const plan = store.latestPlan(STUDENT_ID);
+  if (!plan) return undefined;
+  return vocabularyHint(plan.days.flatMap((day) => day.target_items));
+}
+
+/**
+ * A spoken answer, on its way to becoming a typed one.
+ *
+ * Everything here is about getting a STRING. The moment there is one it goes
+ * through `handleStudentAnswer` — the same door a typed message walks through,
+ * so it meets the same duplicate claim, the same per-student queue and the same
+ * outstanding-question pin. There is no second grading path and there must
+ * never be one.
+ *
+ * The other half of the contract is the failure case. Download, transcription
+ * and normalisation each return `null` rather than throwing, and a `null` is
+ * answered with one line asking him to type it — never with a grade. Nothing
+ * below `null` reaches `recordStudentTurn`, so a failed transcription cannot
+ * become an attempt, cannot tag an error and cannot revise his week. The
+ * outstanding question is left pinned exactly where it was, so typing the
+ * answer afterwards still scores against the day he was asked.
+ */
+export async function handleStudentVoice(
+  thread: Thread,
+  note: VoiceNote,
+  message?: unknown,
+): Promise<void> {
+  let transcript: string | null = null;
+
+  try {
+    const audio = await downloadVoice(note.fileId, process.env.TELEGRAM_BOT_TOKEN ?? "");
+    if (audio) {
+      // `.oga` is what Telegram serves and what two of the three transcription
+      // models reject by extension. `uploadFilename` renames it to `.ogg` — a
+      // string edit, not a transcode; the bytes are untouched.
+      const spoken = await transcribeVoice(audio, uploadFilename(VOICE_FILENAME), {
+        prompt: weekHint(),
+      });
+      // transcribeVoice already normalises; doing it here too is idempotent and
+      // keeps the guarantee local rather than borrowed.
+      transcript = spoken ? normalizeSpeech(spoken) || null : null;
+    }
+  } catch (error) {
+    // Belt and braces. Both halves promise to fail soft, and a promise is not a
+    // guarantee when a student's turn is what it costs.
+    console.warn(
+      `[voice] turn fell back to typing: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    transcript = null;
+  }
+
+  if (!transcript) {
+    await thread.post(
+      <Message accent="#F5A623">
+        <Section>
+          <Markdown>{"I couldn't make that one out — could you type it instead?"}</Markdown>
+        </Section>
+      </Message>,
+    );
+    return;
+  }
+
+  await handleStudentAnswer(thread, transcript, message, transcript);
 }

@@ -26,7 +26,14 @@ import {
 import { telegram } from "@copilotkit/channels/telegram";
 import { store } from "agent-core";
 import { makeChannelAgent } from "./agent";
-import { chatIdFrom, handleStudentAnswer, handleTutorLine, STUDENT_ID } from "./turns";
+import {
+  chatIdFrom,
+  handleStudentAnswer,
+  handleStudentVoice,
+  handleTutorLine,
+  STUDENT_ID,
+} from "./turns";
+import { extractVoice } from "./voice";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
@@ -205,15 +212,38 @@ channel.onWelcome(async ({ thread }) => {
  * Everyone after her is the student.
  */
 channel.onMessage(async ({ thread, message }) => {
-  const text = (message.text ?? "").trim();
-  if (!text) return;
-
   const chatId = chatIdFrom(thread.conversationKey);
   const state = store.read();
   const tutorChat = state.tutor.chat_id;
+  const claimed = Object.values(state.students).some((s) => s.chat_id === chatId);
+
+  /* ── spoken, before typed ──────────────────────────────────────────────────
+   *
+   * A voice note carries NO `message.text`, so the empty-text guard below would
+   * drop it on the floor — which is exactly what happened for as long as this
+   * was unwired. It has to become a string first.
+   *
+   * Only on the student's leg. The tutor types her one line; a voice note from
+   * her is dropped the way it always was, because transcribing it would mean
+   * planning a week off a recording nobody has read back.
+   *
+   * The two student conditions below mirror the two text branches further down —
+   * a chat that has claimed the student role, or anyone who is not the tutor
+   * once the tutor exists — and the upsert mirrors the last branch, so a student
+   * whose first ever message is spoken is enrolled exactly as a typing one is.
+   * ─────────────────────────────────────────────────────────────────────────*/
+  const note = extractVoice(message);
+  if (note && (claimed || (tutorChat !== null && chatId !== tutorChat))) {
+    if (!claimed) store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
+    await handleStudentVoice(thread as never, note, message);
+    return;
+  }
+
+  const text = (message.text ?? "").trim();
+  if (!text) return;
 
   // An explicitly claimed student chat is never the tutor, whoever spoke first.
-  if (Object.values(state.students).some((s) => s.chat_id === chatId)) {
+  if (claimed) {
     await handleStudentAnswer(thread as never, text, message);
     return;
   }
