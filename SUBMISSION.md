@@ -94,7 +94,7 @@ A new participant can run it from a clean clone — README has the credentials t
 
 ## 4 · Two-minute video
 
-Shot list in [`.planning/SHIP.md`](.planning/SHIP.md).
+**Full shot-by-shot script: [`docs/VIDEO-SCRIPT.md`](docs/VIDEO-SCRIPT.md)** — timings, exact words, the lines to paste, and what to do if a take goes wrong.
 
 Say out loud, or a judge assumes it broke:
 - *"The clock is compressed — six days in four minutes."*
