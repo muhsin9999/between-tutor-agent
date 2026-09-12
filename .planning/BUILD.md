@@ -68,14 +68,14 @@ apps/channel      →  TELEGRAM process (long-running). Student chat + teacher i
 apps/web          →  TEACHER PANEL (Telegram Mini App) + /api/tick + /api/brief.
                      Next.js on :3100. CopilotKit React generative UI, NO chat sidebar.
 packages/agent-core → planWeek · nextStep · revisePlan · composeBrief · evidence triggers
-                     · the component vocabulary · the JSON store. Shared by both apps.
+                     · the component vocabulary · the staged JSON → Neon store migration. Shared by both apps.
 apps/mobile       →  UNUSED. Do not touch.
 ```
 
-**State lives in one JSON file**, `.data/between.json`, written through
-`packages/agent-core/src/store.ts`. Both processes run on the same machine, so this
-is sufficient and costs zero setup. No Neon, no Drizzle, no migrations.
-*Label it honestly in the writeup as session state on disk* — [SHIP.md](SHIP.md) has the wording.
+**State is migrating to Neon Postgres.** The project, schema, and local
+`DATABASE_URL` are now in place; see [NEON.md](../docs/NEON.md). The synchronous
+JSON store remains the local fallback until its callers move to async queries.
+Do not split the bot and panel onto separate hosts until that store switch lands.
 
 ## File ownership — the rule that stops you colliding
 

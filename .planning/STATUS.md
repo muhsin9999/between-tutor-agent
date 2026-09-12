@@ -47,7 +47,7 @@ say it out loud. Never reach across.
 | T-A6 | Mini App shell + `initData` | A | ⬜ |
 | T-A7 | The seven components 🤖 | agent | ⬜ |
 | T-B0 | `llm.ts` on the AI SDK (`generateObject`) | B | ✅ |
-| T-B1 | `store.ts` | B | ✅ | 
+| T-B1 | `store.ts` | B | 🟨 | Neon project + schema + JSON data migration ready; async runtime store switch follows |
 | T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ✅ | `GET /api/tick?now=` reports due steps; `POST` resets a rehearsal while keeping enrolment |
 | T-B4 | `evidence.ts` triggers + grading order | B | ✅ | normalised exact match first; repeat-error trigger is deterministic and tested |
@@ -95,3 +95,4 @@ agent can see it. A contract change needs **both** of you, out loud.
 | 13:00 | **Tunnel up:** `https://deal-blake-miller-los.trycloudflare.com` -> :3100, verified 200. Mini App URL is that + `/panel`. UDP/QUIC is blocked on this network — cloudflared fell back to HTTP/2; if it flaps, restart with `--protocol http2`. The URL dies with the process, so if you restart the tunnel you must re-run `/newapp` with the new one. |
 | 12:58 | A tunnel is still needed for the **Mini App panel** (apps/web on :3100) — just not for the bot. |
 | 13:xx | **German fixture target set is pinned in `llm.ts`:** `gehen, sehen, nehmen, sprechen, trinken, fahren`. The planner cannot expand the demo into an invented curriculum. |
+| 13:xx | **Neon is active:** project `between-tutor-agent` in Frankfurt, PostgreSQL 17. `DATABASE_URL` is local and ignored; `001_initial.sql` is applied. JSON → Neon data migration is versioned; the live store is switched only after its synchronous callers are converted. |

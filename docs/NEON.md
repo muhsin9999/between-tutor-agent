@@ -45,6 +45,14 @@ The initial migration was applied when the project was created. The command is
 safe to re-run because every object uses `IF NOT EXISTS`. Do not paste the
 connection string into a tracked file.
 
+To copy the current local rehearsal state into Neon, run:
+
+```bash
+npm run db:migrate:json
+```
+
+This is idempotent and keeps append-only plan and attempt history intact.
+
 ## Application migration
 
 The live hackathon demo retains `.data/between.json` while its synchronous
