@@ -13,12 +13,15 @@ say it out loud. Never reach across.
 
 ## Now
 
+> **`npm install` had never been run** — done at 13:05, lockfile committed. Pull before you start.
+> `.env` created from the example; Muhsin's `TELEGRAM_BOT_TOKEN` slot is in there waiting.
+
 | | |
 |---|---|
 | Block | **Gate 0** |
 | Clock | 12:50 → 13:10 |
 | A · Muhsin is on | A1 Telegram adapter spike |
-| B · Mcjethro is on | B1 prove the key, then B2 contracts |
+| B · Mcjethro is on | B1 prove the key (needs the key pasted into .env) |
 | Next gate | 13:10 — all five [Gate 0 exit criteria](GATE-0.md#gate-0-exit-criteria) said out loud |
 
 ## Gate 0
@@ -29,8 +32,8 @@ say it out loud. Never reach across.
 | A2 bot + Mini App URL registered | A | ⬜ | |
 | A3 Telegram Desktop logged in | A | ⬜ | |
 | B1 real completion came back | B | ⬜ | provider: |
-| B2 `contracts.ts` typechecks both apps | B | ⬜ | |
-| `.env` + `.data/` gitignored | either | ⬜ | |
+| B2 `contracts.ts` typechecks both apps | B | ✅ | 7 tests pin the closed-catalogue + quiet-week rules |
+| `.env` + `.data/` gitignored | either | ✅ | verified |
 
 ## Tasks
 
@@ -43,7 +46,7 @@ say it out loud. Never reach across.
 | T-A5 | Student turn loop | A | ⬜ |
 | T-A6 | Mini App shell + `initData` | A | ⬜ |
 | T-A7 | The seven components 🤖 | agent | ⬜ |
-| T-B0 | `llm.ts` behind `LLM_PROVIDER` | B | ⬜ |
+| T-B0 | `llm.ts` behind `LLM_PROVIDER` | B | 🟨 next |
 | T-B1 | `store.ts` | B | ⬜ |
 | T-B2 | `planWeek()` | B | ⬜ |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ⬜ |
