@@ -83,8 +83,11 @@ is the entry point and the only file that tells you what to do next.**
 
 - **Never commit `.env` or `.data/`.** Both are gitignored; keep it that way.
 - **Never commit real personal data.** Every fixture is synthetic. This repo is public.
-- Commit small and often, prefix `A:` or `B:`, `git pull --rebase` before pushing.
-- Both push to `main`. No branches, no PRs — there is no time and no reviewer.
+- **Work on a branch, never commit to `main` directly.** `a/<task>` or `b/<task>`.
+- Commit small and often, prefix `A:` or `B:`, `git pull --rebase origin main` before opening the PR.
+- Open a PR with `gh pr create --fill`, then squash-merge it yourself. The PR is
+  the record, not a gate — there is no reviewer and no time to wait for one.
+- Keep a branch under ~30 minutes of work.
 
 ## Scope discipline
 

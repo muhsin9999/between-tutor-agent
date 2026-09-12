@@ -85,11 +85,27 @@ makes parallel work possible — everything else is downstream of it.
 
 ## Commit protocol
 
+**Branch → push → PR → merge.** One branch per task, named for the lane and the task:
+
+```
+a/telegram-channel      b/evidence-triggers
+a/mini-app-shell        b/compose-brief
+```
+
+- `git switch -c a/<thing>` off an up-to-date `main`.
 - Commit every time something works. Small and often beats one big push.
 - Prefix messages `A:` or `B:` so the log reads as two lanes.
-- `git pull --rebase` before every push. Never `--force`.
-- Both push to `main`. No branches, no PRs — there is no time and no reviewer.
+- `gh pr create --fill` then **merge your own** — `gh pr merge --squash --delete-branch`.
+  There is no third person and no time to block on a reviewer. The PR is there for
+  the record and so the other lane can see what landed, not as a gate.
+- **Keep branches under ~30 minutes of work.** A long-lived branch in a 2-hour
+  build is how the two lanes discover a conflict at 14:50.
+- `git pull --rebase origin main` before you open the PR. Never `--force`.
 - **Never commit `.env` or `.data/`.** Check `.gitignore` covers both in Gate 0.
+
+> If a PR would block you — the other person is mid-task and you need their file —
+> that is the signal you have crossed a lane boundary. Go back to the ownership
+> table rather than waiting.
 
 ## The three rules that are the product
 
