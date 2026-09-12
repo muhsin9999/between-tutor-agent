@@ -11,9 +11,6 @@ import { Message, Section, Markdown, Context } from "@copilotkit/channels";
 import { planWeek, nextStep, recordStudentTurn, store } from "agent-core";
 import type { PlanDay } from "agent-core/contracts";
 
-/** The demo runs one student. Fixtures name him; see .planning/FIXTURES.md. */
-export const STUDENT_ID = "jonas";
-
 type Thread = {
   conversationKey: string;
   post: (ui: unknown) => Promise<unknown>;
@@ -36,7 +33,11 @@ export function chatIdFrom(conversationKey: string): number {
  * all week, so the reply is TWO LINES — a confirmation, not the plan. Printing
  * six days back at her would undo the entire pitch.
  */
-export async function handleTutorLine(thread: Thread, line: string): Promise<void> {
+export async function handleTutorLine(
+  thread: Thread,
+  studentId: string,
+  line: string,
+): Promise<void> {
   if (line.length < 12) {
     await thread.post(
       <Message accent="#16306B">
@@ -51,7 +52,7 @@ export async function handleTutorLine(thread: Thread, line: string): Promise<voi
     return;
   }
 
-  const plan = await planWeek({ student_id: STUDENT_ID, tutor_line: line });
+  const plan = await planWeek({ student_id: studentId, tutor_line: line });
   store.addPlan(plan);
   store.startClock();
 
@@ -153,19 +154,20 @@ function hash(value: string): number {
 
 export async function handleStudentAnswer(
   thread: Thread,
+  studentId: string,
   text: string,
   message?: unknown,
 ): Promise<void> {
   if (message !== undefined && isDuplicate(message)) return;
-  return serialize(STUDENT_ID, () => studentTurn(thread, text));
+  return serialize(studentId, () => studentTurn(thread, studentId, text));
 }
 
-async function studentTurn(thread: Thread, text: string): Promise<void> {
-  const plan = store.latestPlan(STUDENT_ID);
-  const step = store.dueStep(STUDENT_ID);
+async function studentTurn(thread: Thread, studentId: string, text: string): Promise<void> {
+  const plan = store.latestPlan(studentId);
+  const step = store.dueStep(studentId);
 
   if (!step || !plan) {
-    outstanding.delete(STUDENT_ID);
+    outstanding.delete(studentId);
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -180,31 +182,31 @@ async function studentTurn(thread: Thread, text: string): Promise<void> {
     return;
   }
 
-  const pending = outstanding.get(STUDENT_ID);
+  const pending = outstanding.get(studentId);
 
   // Grade ONLY a reply to the exact question we asked, from the plan version we
   // asked it under. Anything else — first contact, a revised plan, a message
   // that arrived while the week moved — gets asked, not scored.
   if (!pending || pending.day !== step.day || pending.version !== plan.version) {
-    outstanding.set(STUDENT_ID, { version: plan.version, day: step.day });
+    outstanding.set(studentId, { version: plan.version, day: step.day });
     await thread.post(ask(step));
     return;
   }
 
   // Claim the question before any await. A second message cannot now be graded
   // against the same day even if it slips past the queue.
-  outstanding.delete(STUDENT_ID);
+  outstanding.delete(studentId);
 
-  const answeredBefore = store.attemptsFor(STUDENT_ID);
+  const answeredBefore = store.attemptsFor(studentId);
 
   const { attempt, trigger, revised_plan } = await recordStudentTurn({
-    student_id: STUDENT_ID,
+    student_id: studentId,
     day: step.day,
     gave: text,
   });
 
   const streak = store
-    .attemptsFor(STUDENT_ID)
+    .attemptsFor(studentId)
     .reverse()
     .findIndex((a) => !a.correct);
 
@@ -241,10 +243,10 @@ async function studentTurn(thread: Thread, text: string): Promise<void> {
 
   // Ask the next thing, if anything is due. One question at a time, and pinned
   // to whichever plan version is current AFTER any revision.
-  const current = store.latestPlan(STUDENT_ID);
-  const next = store.dueStep(STUDENT_ID);
+  const current = store.latestPlan(studentId);
+  const next = store.dueStep(studentId);
   if (next && current && next.day !== step.day) {
-    outstanding.set(STUDENT_ID, { version: current.version, day: next.day });
+    outstanding.set(studentId, { version: current.version, day: next.day });
     await thread.post(ask(next));
   }
 }
