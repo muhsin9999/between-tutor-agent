@@ -13,6 +13,7 @@
  */
 import { headers } from "next/headers";
 import { persistence } from "agent-core";
+import { roster } from "@/lib/roster";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getSession } from "@/lib/auth";
@@ -35,12 +36,17 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
 });
 
 export default async function SettingsPage() {
-  const state = await persistence.read();
-  const students = Object.values(state.students);
-  const tutorChat = state.tutor.chat_id;
-
   const session = await getSession(await headers());
   const telegramUserId = session?.user.telegramUserId ?? null;
+
+  /*
+   * Scoped, like the roster. This page names students and offers to delete
+   * their data, so listing every student in the database was the same leak as
+   * on the roster and a worse one here: the Danger zone would have offered one
+   * tutor a Delete button over another tutor's student.
+   */
+  const students = (await roster(telegramUserId)).map((row) => ({ id: row.id, name: row.name }));
+  const tutorChat = (await persistence.read()).tutor.chat_id;
 
   /**
    * There is no `telegram_linked_at` column yet, and adding one is a migration.
