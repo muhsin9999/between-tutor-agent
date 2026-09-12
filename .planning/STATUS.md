@@ -46,12 +46,12 @@ say it out loud. Never reach across.
 | T-A5 | Student turn loop | A | ⬜ |
 | T-A6 | Mini App shell + `initData` | A | ⬜ |
 | T-A7 | The seven components 🤖 | agent | ⬜ |
-| T-B0 | `llm.ts` behind `LLM_PROVIDER` | B | 🟨 next |
-| T-B1 | `store.ts` | B | ⬜ |
-| T-B2 | `planWeek()` | B | ⬜ |
+| T-B0 | `llm.ts` on the AI SDK (`generateObject`) | B | ✅ |
+| T-B1 | `store.ts` | B | ✅ | 
+| T-B2 | `planWeek()` | B | 🟨 written, never called live — needs the key |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ⬜ |
 | T-B4 | `evidence.ts` triggers + grading order | B | ⬜ |
-| T-B5 | **`revisePlan()`** — never cut | B | ⬜ |
+| T-B5 | **`revisePlan()`** — never cut | B | 🟨 written + legality-checked, not called live |
 | T-B6 | `composeBrief()` | B | ⬜ |
 | INT | Panel on real data, week run twice | both | ⬜ |
 | REC | **Backup take recorded** | both | ⬜ |
@@ -68,7 +68,8 @@ say it out loud. Never reach across.
 
 | From | To | What | Done |
 |---|---|---|---|
-| | | | |
+| B | A | `apps/channel/package.json` test script quotes its glob in **single** quotes — cmd doesn't strip them, so node matches nothing and reports success having run zero tests. Change to double quotes. I fixed the identical bug in agent-core; leaving yours alone per file ownership. | ⬜ |
+| B | A | `agent-core/contracts` is live: `PlanDay`, `Plan`, `Attempt`, `ERROR_TAGS`, `BriefComponent`. `agent-core` also exports `store.*` — use `store.claimUpdate(update_id)` for dedupe (T-A3) and `store.dueStep(student_id)` for the student turn (T-A5). Don't write your own. | ⬜ |
 
 ## Cuts taken
 

@@ -120,6 +120,48 @@ clean take.
 
 ---
 
+## What bad output looks like
+
+The only evaluation you will actually run today is **two people watching the
+rehearsal at 14:45.** So this is the list of things to watch for, not a rubric.
+Each one is visible by eye in under a second, and each one has ruined a demo.
+
+The schema catches structural failures. These are the ones it *can't* catch,
+because the output is well-formed and wrong.
+
+### `planWeek`
+
+| Looks like | Why it matters | Fix |
+|---|---|---|
+| **A `produce` day lands on day 1** | The tutor's line says he is nervous about speaking out loud. Putting production first means the prompt read the nouns and ignored the human half of the sentence — which is the exact moment a judge decides whether this is a planner or a template | Strengthen the house rule in `llm.ts`; do not fix by hand-editing the fixture |
+| **Seven or eight items in `target_items`** | She named one topic. A model padding the set is inventing curriculum, and the "introduces no new material" claim dies on camera | Derive the closed set once, reuse across days |
+| **`expects` is a sentence** | Grading is exact normalised comparison first. A sentence never matches, so every answer falls through to the model grader and the false-negative risk goes up sixfold | One word where possible |
+| **Six near-identical drill days** | Nothing to revise, so `revisePlan` has nothing visible to change | Require a mix of kinds |
+
+### `revisePlan`
+
+| Looks like | Why it matters | Fix |
+|---|---|---|
+| **The reason is generic** — "adjusted the plan based on performance" | This one sentence *is* the agency claim. Generic reads as a template | Demand it name what was seen and what changed |
+| **Days already done come back rewritten** | The v1/v2 diff becomes noise and the side-by-side shot stops reading | Already blocked structurally — days ≤ today return unchanged |
+| **A new target item appears** | Caught by `assertRevisionLegal`, which throws | Nothing to do; it cannot reach the panel |
+
+### `composeBrief`
+
+| Looks like | Why it matters | Fix |
+|---|---|---|
+| **All seven components, every week** | Disproves the entire generative-UI claim in one frame. The two weeks must differ | 2–5 enforced in schema; watch it anyway |
+| **`Breakthrough` built from a one-word answer** | It is meant to be something he wrote unprompted. Promoting "ging" to a breakthrough is the model flattering the demo, and it reads as fake | Require an unprompted sentence, not a correct answer |
+| **`QuietCard` padded with a grid or a zeroed streak** | Collapses the two fixture weeks into one look — the back-to-back cut is the whole argument | Blocked by `assertBriefLegal`; covered by a test |
+| **The headline restates the components** | The tutor reads it first and learns nothing | It should say the thing she would not work out from the panel |
+| **`ErrorGrid` cleans up his spelling** | The point is his literal wrong answer. Tidied answers look synthesised — because they are | `gave` is verbatim, untrimmed |
+
+### The check, at 14:45
+
+Run both fixture weeks. Put the two panels side by side. **If a stranger could
+tell they came from the same codebase, something above went wrong.** That is the
+entire evaluation, and it is the same thing the video has to show.
+
 ## What each lane may assume
 
 | A assumes | B assumes |

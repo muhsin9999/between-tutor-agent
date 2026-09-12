@@ -13,3 +13,6 @@ export {
   WORKPLACE_CONTEXT,
 } from "./capabilities/workplace";
 export * from "./shared";
+
+export * as store from "./store";
+export { planWeek, revisePlan, nextStep } from "./llm";
