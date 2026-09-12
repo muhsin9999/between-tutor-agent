@@ -48,3 +48,12 @@ test("a repeat error appends a legal v2 instead of overwriting v1", async () => 
   assert.equal(result.revised_plan?.version, 2);
   assert.deepEqual(store.planHistory("jonas").map((item) => item.version), [1, 2]);
 });
+
+test("a prior version's trigger does not re-fire after the plan is revised", () => {
+  const v2 = { ...plan, version: 2, reason: "same error twice" };
+  const oldAttempts = [
+    { student_id: "jonas", plan_version: 1, day: 1, answered_at: "2026-01-01T00:00:00.000Z", gave: "sehte", correct: false, error_tag: "strong-verb-vowel" as const },
+    { student_id: "jonas", plan_version: 1, day: 2, answered_at: "2026-01-02T00:00:00.000Z", gave: "nehmte", correct: false, error_tag: "strong-verb-vowel" as const },
+  ];
+  assert.equal(evidence.detectEvidence({ plan: v2, attempts: oldAttempts, dueDay: 3 }), null);
+});

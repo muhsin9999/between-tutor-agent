@@ -127,3 +127,8 @@ test("resetDemo keeps enrolment but clears rehearsal state", () => {
   assert.deepEqual(store.read().attempts, []);
   assert.deepEqual(store.read().seen_updates, []);
 });
+
+test("update leaves no temporary file behind after a normal write", () => {
+  store.setTutorChat(456);
+  assert.equal(store.read().tutor.chat_id, 456);
+});

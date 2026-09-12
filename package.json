@@ -20,6 +20,9 @@
     "channel:setup": "npx copilotkit@latest channels setup",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev:web": "npm run dev --workspace web",
+    "rehearse:backend": "node --env-file-if-exists=.env --import tsx scripts/rehearse-backend.ts",
+    "rehearse:quiet": "node --env-file-if-exists=.env --import tsx scripts/rehearse-quiet.ts",
+    "seed:quiet": "node --import tsx scripts/seed-quiet.ts",
     "test": "npm run test --workspaces --if-present",
     "verify": "npm run typecheck && npm test"
   },

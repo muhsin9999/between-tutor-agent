@@ -50,8 +50,17 @@ export function detectEvidence(args: {
   attempts: Attempt[];
   dueDay: number;
 }): EvidenceTrigger | null {
-  const attempts = args.attempts
+  const allAttempts = args.attempts
     .filter((attempt) => attempt.student_id === args.plan.student_id)
+    .sort((a, b) => Date.parse(a.answered_at) - Date.parse(b.answered_at));
+  const attempts = allAttempts
+    // A trigger revises the CURRENT plan. Looking back across every historical
+    // version would re-fire the same two misses after v2 exists, producing an
+    // infinite stream of revisions on every later answer.
+    .filter(
+      (attempt) =>
+        attempt.student_id === args.plan.student_id && attempt.plan_version === args.plan.version,
+    )
     .sort((a, b) => Date.parse(a.answered_at) - Date.parse(b.answered_at));
 
   for (const tag of ERROR_TAGS) {
@@ -73,7 +82,9 @@ export function detectEvidence(args: {
     return { kind: "three-correct", target_items: [...new Set(target_items)] };
   }
 
-  const lastSeenDay = attempts.reduce((latest, attempt) => Math.max(latest, attempt.day), 0);
+  // Silence is about the human, not a plan version: a day-two answer still
+  // counts as being seen after it caused the plan to become v2.
+  const lastSeenDay = allAttempts.reduce((latest, attempt) => Math.max(latest, attempt.day), 0);
   if (args.dueDay - lastSeenDay >= 2) return { kind: "quiet", last_seen_day: lastSeenDay };
   return null;
 }

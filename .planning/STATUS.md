@@ -51,8 +51,8 @@ say it out loud. Never reach across.
 | T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ✅ | `GET /api/tick?now=` reports due steps; `POST` resets a rehearsal while keeping enrolment |
 | T-B4 | `evidence.ts` triggers + grading order | B | ✅ | normalised exact match first; repeat-error trigger is deterministic and tested |
-| T-B5 | **`revisePlan()`** — never cut | B | 🟨 | `recordStudentTurn()` now invokes and appends it; needs one real Channel turn |
-| T-B6 | `composeBrief()` | B | 🟨 | closed-vocabulary composition and grounding checks are in; needs one live completion |
+| T-B5 | **`revisePlan()`** — never cut | B | ✅ | live fixture: two repeated strong-verb errors append legal v2; day 3 becomes `explain` |
+| T-B6 | `composeBrief()` | B | ✅ | live error and quiet fixtures return distinct validated component trees |
 | INT | Panel on real data, week run twice | both | ⬜ |
 | REC | **Backup take recorded** | both | ⬜ |
 
@@ -94,3 +94,4 @@ agent can see it. A contract change needs **both** of you, out loud.
 | 12:58 | `TelegramInlineButton` is a first-class payload type, so Channels `<Button>` renders as a **native inline keyboard**. The ≤8-choice rule costs us nothing to honour. |
 | 13:00 | **Tunnel up:** `https://deal-blake-miller-los.trycloudflare.com` -> :3100, verified 200. Mini App URL is that + `/panel`. UDP/QUIC is blocked on this network — cloudflared fell back to HTTP/2; if it flaps, restart with `--protocol http2`. The URL dies with the process, so if you restart the tunnel you must re-run `/newapp` with the new one. |
 | 12:58 | A tunnel is still needed for the **Mini App panel** (apps/web on :3100) — just not for the bot. |
+| 13:xx | **German fixture target set is pinned in `llm.ts`:** `gehen, sehen, nehmen, sprechen, trinken, fahren`. The planner cannot expand the demo into an invented curriculum. |
