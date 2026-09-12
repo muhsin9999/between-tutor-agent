@@ -33,6 +33,12 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 
 ## Timeline
 
+> **Strengths, for the stretch work:** Mcjethro is front-end inclined — React,
+> the panel, the dashboard, anything a user looks at. Muhsin has been carrying
+> `agent-core`, the triggers and the prompts. [STRETCH.md](STRETCH.md) is split
+> that way even though it inverts the original lanes; the lanes below still
+> describe who owns which files for the core build.
+>
 > **Lane assignment — swap it in the next 10 seconds if it's wrong, then leave it.**
 > **Mcjethro on A** (the surface): BotFather, the tunnel and the Telegram spike.
 > **Muhsin on B** (the engine): `revisePlan`

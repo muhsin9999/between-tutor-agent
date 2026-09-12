@@ -24,15 +24,45 @@ and it is the cheapest thing on the list to close.
 
 ---
 
-## A · Mcjethro — multi-student · 20 min
+## A · Mcjethro — the tutor's dashboard · 25 min
+
+**Files:** `apps/web/src/app/tutor/**` — new route, no overlap with B.
+
+The panel answers *"how did Jonas's week go"*. The dashboard answers the question
+a tutor with twenty clients actually has on a Sunday night: **who needs me?**
+
+- A list of enrolled students: name, day N of 6, answered/missed, whether a
+  revision fired this week.
+- Sorted by **who needs attention**, not alphabetically. Quiet students first,
+  then repeat-error students, then everyone on track.
+- Each row links to that student's panel: `/panel?student_id=<id>`.
+- Read from `store.read().students` + `store.attemptsFor()` +
+  `store.latestPlan()`. **No model call** — this is a list, and a model here adds
+  three seconds and nothing else.
+- Reuse the palette in `assets/brand/README.md` and the component conventions in
+  `apps/web/src/components/between/` so it reads as one product with the panel.
+
+State belongs in the row, not only in a number: a quiet student needs a chip that
+says so before the reader has parsed any digits. Semantic colour (quiet / stuck /
+on track) is separate from the amber accent.
+
+**Done when:** `/tutor` lists every enrolled student with a real status, ordered
+by need, each row linking to their panel.
+
+> It will show **one row** until B's multi-student change lands — `STUDENT_ID` is
+> still hardcoded in the channel. Build against the map, not against the count,
+> and it fills up on its own.
+
+---
+
+## B · Muhsin — multi-student · 20 min
 
 **Files:** `apps/channel/src/turns.tsx`, `channel.tsx`
 
 1. **Resolve the student from the chat, not a constant.**
    `store.studentByChat(chatId)` already exists. Replace every `STUDENT_ID` with
-   the resolved id; there are twelve. Keep the per-student queue and the
-   `outstanding` map keyed by that id — they already are, so they start working
-   correctly for free.
+   the resolved id; there are twelve. The per-student queue and the `outstanding`
+   map are already keyed by student id, so they start working correctly for free.
 
 2. **Enrolment creates a student.** `/start <token>` mints
    `student_id = "s" + chatId`, asks for a first name, and writes the row. The
@@ -46,37 +76,13 @@ and it is the cheapest thing on the list to close.
 **Done when:** two different Telegram accounts each hold their own week, and the
 tutor's line goes to whichever one she named.
 
-**If it fights you past 14:55, stop.** One student demonstrated beats two broken.
-
----
-
-## B · Muhsin — the tutor's dashboard · 25 min
-
-**Files:** `apps/web/src/app/tutor/**` — new route, no overlap with A.
-
-The panel answers *"how did Jonas's week go"*. The dashboard answers the question
-a tutor with twenty clients actually has on a Sunday night: **who needs me?**
-
-- A list of enrolled students: name, day N of 6, answered/missed, whether a
-  revision fired this week.
-- Sorted by **who needs attention**, not alphabetically. Quiet students first,
-  then repeat-error students, then everyone on track.
-- Each row links to that student's panel: `/panel?student_id=<id>`.
-- Build it against `store.read().students` + `store.attemptsFor()` +
-  `store.latestPlan()`. **No model call** — this is a list, and a model here adds
-  three seconds and nothing else.
-
-Works with one student today and gets better with twenty. Reuse the palette in
-`assets/brand/README.md` so it reads as the same product as the panel.
-
-**Done when:** `/tutor` lists every enrolled student with a real status, ordered
-by need, each linking to their panel.
+**If it fights past 14:55, stop.** One student demonstrated beats two broken.
 
 ---
 
 ## If both land before 15:00 · visual explanation in chat
 
-**~15 min, A's lane.** The Telegram renderer supports `message` `section`
+**~15 min, B's lane.** The Telegram renderer supports `message` `section`
 `markdown` `header` `fields` `context` `divider` `image` `table` `actions`
 `select` `input` `code` `pre` — verified against the adapter. **`chart` is
 skipped**, so charts are not an option.
