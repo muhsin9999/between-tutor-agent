@@ -1,68 +1,234 @@
-import { createChannel } from "@copilotkit/channels";
-import { isSearchConfigured, isWorkplaceConfigured, WORKPLACE_CONTEXT } from "agent-core";
+/**
+ * T-A1 — the Telegram channel. Both legs of Between live here.
+ *
+ * ONE bot, TWO roles, fanned out on who is talking:
+ *   - the tutor  → sends one line a week, gets an enrolment link and a panel button
+ *   - a student  → gets one question at a time, in plain chat, forever
+ *
+ * The student NEVER gets a panel or a webview. ≤8 choices render as a native
+ * Telegram inline keyboard and stay in the conversation. The product's premise
+ * is that he will not open a practice app — that is *why* the six days are
+ * empty — so a panel on his leg would rebuild the exact failure it exists to fix.
+ *
+ * Transport: the direct adapter path. `telegram({ token })` long-polls over
+ * grammY, so there is no public URL and no webhook. (The tunnel in .env is for
+ * the tutor's Mini App, which is a different surface entirely.)
+ */
+import {
+  createChannel,
+  defineChannelCommand,
+  Message,
+  Section,
+  Markdown,
+  Actions,
+  Button,
+} from "@copilotkit/channels";
+import { telegram } from "@copilotkit/channels/telegram";
+import { store } from "agent-core";
 import { makeChannelAgent } from "./agent";
+import { chatIdFrom, handleStudentAnswer, handleTutorLine, STUDENT_ID } from "./turns";
 import { required } from "./env";
-import { IncidentCard, Timeline, welcomeMessage } from "./components";
-import { proposeAction, readThread, searchTheWeb } from "./tools";
 
-// Tools are registered only when their credential is present, so the agent is
-// never handed a tool that will fail when it calls it.
-const tools = [
-  readThread,
-  proposeAction,
-  ...(isSearchConfigured() ? [searchTheWeb] : []),
-];
+const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
+const PANEL_URL = `${process.env.PUBLIC_APP_URL ?? "http://127.0.0.1:3100"}/panel`;
+
+/* ── commands ────────────────────────────────────────────────────────────────
+ *
+ * Anything beginning with "/" is routed by the adapter to the COMMAND path, not
+ * to onMessage — so a slash command with no registered handler is silently
+ * DROPPED. That is why /tutor and /start produced nothing while "Hi" worked.
+ *
+ * Every command needs a NON-EMPTY description: the adapter registers them via
+ * Telegram's setMyCommands, which 400s on an empty one and only warns at
+ * startup. The descriptions are also what Telegram shows in its "/" menu, so
+ * they are user-facing copy, not filler.
+ *
+ * Declared above createChannel because they are passed into it — a `const`
+ * referenced before its declaration is a temporal-dead-zone throw at load.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const tutorCommand = defineChannelCommand({
+  name: "tutor",
+  description: "Set yourself up as the tutor",
+  async handler({ thread }) {
+    await thread.post(
+      <Message accent="#16306B">
+        <Section>
+          <Markdown>
+            {[
+              "You're set up as the tutor.",
+              "",
+              "Send me one line at the end of a lesson — who, what, and anything human about how it went. I'll plan their six days and have a briefing ready five minutes before you next sit down.",
+              "",
+              "Share this with a student to enrol them:",
+              `https://t.me/${BOT_USERNAME}?start=demo`,
+            ].join("\n")}
+          </Markdown>
+        </Section>
+        <Actions>
+          <Button url={PANEL_URL}>Open the lesson brief</Button>
+        </Actions>
+      </Message>,
+    );
+  },
+});
+
+/**
+ * /start and /start <token> — enrolment. The student taps a link from his tutor
+ * and is in. No app, no account, no password: that is the product.
+ */
+const startCommand = defineChannelCommand({
+  name: "start",
+  description: "Begin, or join with your tutor's link",
+  async handler({ thread, text }) {
+    const enrolled = Boolean((text ?? "").trim());
+    await thread.post(
+      <Message accent="#F5A623">
+        <Section>
+          <Markdown>
+            {enrolled
+              ? "You're in. Your tutor set this week's practice — about ten minutes a day, right here.\n\nI'll ask you the first thing shortly."
+              : "I'm **Between**. Your tutor sets the week; I keep you company through it.\n\nIf you have a link from your tutor, tap it to start."}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+  },
+});
+
+
+/**
+ * Dev escape hatches. Not part of the demo — during the take the tutor simply
+ * types her line and the student simply answers.
+ *
+ * They exist because the same Telegram account on a laptop and a phone is ONE
+ * chat with the bot, so "whoever speaks first is the tutor" cannot be tested
+ * solo. Two accounts, two roles, claimed explicitly.
+ */
+const studentCommand = defineChannelCommand({
+  name: "student",
+  description: "Claim this chat as the student (testing)",
+  async handler({ thread }) {
+    // The command context's thread does not surface conversationKey in its
+    // public type, but the handle is the same object.
+    const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
+    store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
+    const plan = store.latestPlan(STUDENT_ID);
+    await thread.post(
+      <Message accent="#F5A623">
+        <Section>
+          <Markdown>
+            {plan
+              ? "You're the student. Say anything and I'll give you today's question."
+              : "You're the student. Your tutor hasn't set the week yet."}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+  },
+});
+
+const resetCommand = defineChannelCommand({
+  name: "reset",
+  description: "Clear the week and start a fresh take (testing)",
+  async handler({ thread }) {
+    store.resetDemo();
+    await thread.post(
+      <Message accent="#16306B">
+        <Section>
+          <Markdown>
+            {"Cleared. Plans, answers and the clock are gone; enrolment kept.\n\nTutor: send your line again."}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+  },
+});
+
+/* ── the channel ─────────────────────────────────────────────────────────── */
 
 export const channel = createChannel({
-  // Must equal the Channel Code in Intelligence, character for character. A
-  // mismatch leaves the Channel at "Waiting for runtime" and is validated at
-  // startup, not here.
-  name: required("CHANNEL_CODE"),
+  // Required even on the direct-adapter path — the runtime throws
+  // "Intelligence Channel is missing a `name`" without it. Note `.env` ships
+  // CHANNEL_CODE= as an EMPTY STRING, so `??` would keep it; `||` is correct.
+  name: process.env.CHANNEL_CODE || "between",
 
-  // Required. "platform" derives the canonical user from provider + workspace +
-  // platform user id. Do NOT move this onto CopilotRuntime — that one is for
-  // web requests and must be absent on a Channels-only runtime.
+  // Belongs HERE and not on CopilotRuntime — that one is for web requests and
+  // must be absent on a Channels-only runtime.
   identifyUser: "platform",
 
-  agent: makeChannelAgent,
-  tools,
-  components: [IncidentCard, Timeline],
+  adapters: [
+    telegram({
+      token: required("TELEGRAM_BOT_TOKEN"),
+      // "polling" is the default; stated so nobody later assumes a webhook.
+      mode: "polling",
+      greeting:
+        "I'm Between. Your tutor sets the week; I keep you company through it.\n\n" +
+        "If you have a link from your tutor, tap it to start.",
+    }),
+  ],
 
-  // Injected into the agent's prompt on every run.
+  agent: makeChannelAgent,
+  commands: [tutorCommand, startCommand, studentCommand, resetCommand],
+
   context: [
-    
-    {
-      description: "Rendering",
-      value:
-        "You can draw native UI by calling incident_card or timeline. Prefer them over prose whenever the answer has structure.",
-    },
-    ...(isWorkplaceConfigured()
-      ? [{ description: "Workplace", value: WORKPLACE_CONTEXT }]
-      : []),
     {
       description: "Surface",
       value:
-        "This is a chat thread in a channel people are actively working in. Assume others are reading and that some joined late.",
+        "This is a one-to-one Telegram chat on a phone, often read on a bus. " +
+        "One question at a time. Never a wall of text, never a numbered list of five things. " +
+        "Two short lines is a long message here.",
     },
   ],
-
 });
 
-// A mention subscribes the conversation, so the agent then follows along instead
-// of needing to be @-mentioned every single turn.
-channel.onMention(async ({ thread }) => {
-  await thread.subscribe();
-  await thread.runAgent();
+/* ── everyone ────────────────────────────────────────────────────────────── */
+
+channel.onWelcome(async ({ thread }) => {
+  await thread.post(
+    <Message accent="#F5A623">
+      <Section>
+        <Markdown>
+          {"I'm **Between**.\n\nYour tutor sets the week. I'll keep you company through it — about ten minutes a day, right here."}
+        </Markdown>
+      </Section>
+    </Message>,
+  );
 });
 
-// Non-mentioned turns only ever reach onMessage — gate them on the flag or the
-// agent will answer every message in every channel it has been invited to.
-channel.onMessage(async ({ thread }) => {
-  if (await thread.isSubscribed()) {
-    await thread.runAgent();
+/**
+ * ONE bot, TWO roles, fanned out on chat id.
+ *
+ * The FIRST person to message the bot is the tutor. No command, no setup screen
+ * — because the pitch is that she types one line, and making her run /tutor
+ * first would undercut it on camera. /tutor stays as a dev escape hatch.
+ * Everyone after her is the student.
+ */
+channel.onMessage(async ({ thread, message }) => {
+  const text = (message.text ?? "").trim();
+  if (!text) return;
+
+  const chatId = chatIdFrom(thread.conversationKey);
+  const state = store.read();
+  const tutorChat = state.tutor.chat_id;
+
+  // An explicitly claimed student chat is never the tutor, whoever spoke first.
+  if (Object.values(state.students).some((s) => s.chat_id === chatId)) {
+    await handleStudentAnswer(thread as never, text);
+    return;
   }
-});
 
-channel.onWelcome(async ({ thread, platform }) => {
-  await thread.post(welcomeMessage(platform));
+  if (tutorChat === null) {
+    store.setTutorChat(chatId);
+    await handleTutorLine(thread as never, text);
+    return;
+  }
+
+  if (chatId === tutorChat) {
+    await handleTutorLine(thread as never, text);
+    return;
+  }
+
+  store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
+  await handleStudentAnswer(thread as never, text);
 });
