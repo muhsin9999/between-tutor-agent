@@ -24,7 +24,9 @@ import {
   Button,
 } from "@copilotkit/channels";
 import { telegram } from "@copilotkit/channels/telegram";
+import { store } from "agent-core";
 import { makeChannelAgent } from "./agent";
+import { chatIdFrom, handleStudentAnswer, handleTutorLine, STUDENT_ID } from "./turns";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
@@ -94,6 +96,55 @@ const startCommand = defineChannelCommand({
   },
 });
 
+
+/**
+ * Dev escape hatches. Not part of the demo — during the take the tutor simply
+ * types her line and the student simply answers.
+ *
+ * They exist because the same Telegram account on a laptop and a phone is ONE
+ * chat with the bot, so "whoever speaks first is the tutor" cannot be tested
+ * solo. Two accounts, two roles, claimed explicitly.
+ */
+const studentCommand = defineChannelCommand({
+  name: "student",
+  description: "Claim this chat as the student (testing)",
+  async handler({ thread }) {
+    // The command context's thread does not surface conversationKey in its
+    // public type, but the handle is the same object.
+    const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
+    store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
+    const plan = store.latestPlan(STUDENT_ID);
+    await thread.post(
+      <Message accent="#F5A623">
+        <Section>
+          <Markdown>
+            {plan
+              ? "You're the student. Say anything and I'll give you today's question."
+              : "You're the student. Your tutor hasn't set the week yet."}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+  },
+});
+
+const resetCommand = defineChannelCommand({
+  name: "reset",
+  description: "Clear the week and start a fresh take (testing)",
+  async handler({ thread }) {
+    store.resetDemo();
+    await thread.post(
+      <Message accent="#16306B">
+        <Section>
+          <Markdown>
+            {"Cleared. Plans, answers and the clock are gone; enrolment kept.\n\nTutor: send your line again."}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+  },
+});
+
 /* ── the channel ─────────────────────────────────────────────────────────── */
 
 export const channel = createChannel({
@@ -118,7 +169,7 @@ export const channel = createChannel({
   ],
 
   agent: makeChannelAgent,
-  commands: [tutorCommand, startCommand],
+  commands: [tutorCommand, startCommand, studentCommand, resetCommand],
 
   context: [
     {
@@ -145,6 +196,39 @@ channel.onWelcome(async ({ thread }) => {
   );
 });
 
-channel.onMessage(async ({ thread }) => {
-  await thread.runAgent();
+/**
+ * ONE bot, TWO roles, fanned out on chat id.
+ *
+ * The FIRST person to message the bot is the tutor. No command, no setup screen
+ * — because the pitch is that she types one line, and making her run /tutor
+ * first would undercut it on camera. /tutor stays as a dev escape hatch.
+ * Everyone after her is the student.
+ */
+channel.onMessage(async ({ thread, message }) => {
+  const text = (message.text ?? "").trim();
+  if (!text) return;
+
+  const chatId = chatIdFrom(thread.conversationKey);
+  const state = store.read();
+  const tutorChat = state.tutor.chat_id;
+
+  // An explicitly claimed student chat is never the tutor, whoever spoke first.
+  if (Object.values(state.students).some((s) => s.chat_id === chatId)) {
+    await handleStudentAnswer(thread as never, text);
+    return;
+  }
+
+  if (tutorChat === null) {
+    store.setTutorChat(chatId);
+    await handleTutorLine(thread as never, text);
+    return;
+  }
+
+  if (chatId === tutorChat) {
+    await handleTutorLine(thread as never, text);
+    return;
+  }
+
+  store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
+  await handleStudentAnswer(thread as never, text);
 });
