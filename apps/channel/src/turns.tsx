@@ -59,8 +59,8 @@ export async function handleTutorLine(thread: Thread, line: string): Promise<voi
     <Message accent="#16306B">
       <Section>
         <Markdown>
-          {`Got it. Six days planned for ${plan.days[0]?.target_items.length ?? 0} items, ` +
-            `starting today.\n\nI'll have your briefing ready before the next lesson.`}
+          {"Got it — six days planned, starting today.\n\n" +
+            "I'll have your briefing ready before the next lesson."}
         </Markdown>
       </Section>
       <Context>{plan.reason}</Context>
@@ -87,6 +87,19 @@ function ask(step: PlanDay) {
   );
 }
 
+/**
+ * Which day's question we have actually PUT TO HIM, per student.
+ *
+ * Without this, his first message after enrolling — "I want day 1", "hi",
+ * anything — is graded as the answer to a question he was never asked, and day 1
+ * is burned before the take starts. Only ever grade a reply to a question we
+ * asked.
+ *
+ * In-memory on purpose: it is per-run conversational state, not a fact about the
+ * week, and /reset already clears the week between takes.
+ */
+const asked = new Map<string, number>();
+
 export async function handleStudentAnswer(thread: Thread, text: string): Promise<void> {
   const step = store.dueStep(STUDENT_ID);
 
@@ -106,10 +119,11 @@ export async function handleStudentAnswer(thread: Thread, text: string): Promise
     return;
   }
 
-  // The first message after enrolment is not an answer to anything — ask, don't grade.
   const answered = store.attemptsFor(STUDENT_ID);
-  const isFirstContact = answered.length === 0 && !/\w/.test(text.replace(/^\/\w+/, ""));
-  if (isFirstContact) {
+
+  // Nothing was asked, so nothing can be an answer. Ask.
+  if (asked.get(STUDENT_ID) !== step.day) {
+    asked.set(STUDENT_ID, step.day);
     await thread.post(ask(step));
     return;
   }
@@ -160,5 +174,10 @@ export async function handleStudentAnswer(thread: Thread, text: string): Promise
 
   // Ask the next thing, if anything is due. One question at a time.
   const next = store.dueStep(STUDENT_ID);
-  if (next && next.day !== step.day) await thread.post(ask(next));
+  if (next && next.day !== step.day) {
+    asked.set(STUDENT_ID, next.day);
+    await thread.post(ask(next));
+  } else {
+    asked.delete(STUDENT_ID);
+  }
 }
