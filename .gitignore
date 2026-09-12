@@ -16,3 +16,4 @@ apps/mobile/.expo/
 .data/
 .playwright-mcp/
 apps/web/public/explain/
+.vercel
