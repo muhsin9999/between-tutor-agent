@@ -214,7 +214,7 @@ channel.onMessage(async ({ thread, message }) => {
 
   // An explicitly claimed student chat is never the tutor, whoever spoke first.
   if (Object.values(state.students).some((s) => s.chat_id === chatId)) {
-    await handleStudentAnswer(thread as never, text);
+    await handleStudentAnswer(thread as never, text, message);
     return;
   }
 
@@ -230,5 +230,5 @@ channel.onMessage(async ({ thread, message }) => {
   }
 
   store.upsertStudent({ id: STUDENT_ID, name: "Jonas", chat_id: chatId });
-  await handleStudentAnswer(thread as never, text);
+  await handleStudentAnswer(thread as never, text, message);
 });

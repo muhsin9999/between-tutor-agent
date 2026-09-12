@@ -88,23 +88,84 @@ function ask(step: PlanDay) {
 }
 
 /**
- * Which day's question we have actually PUT TO HIM, per student.
+ * The outstanding question, per student: which plan version and which day we
+ * actually PUT TO HIM.
  *
- * Without this, his first message after enrolling — "I want day 1", "hi",
- * anything — is graded as the answer to a question he was never asked, and day 1
- * is burned before the take starts. Only ever grade a reply to a question we
- * asked.
+ * Three distinct failure modes this closes, all of which we hit live:
  *
- * In-memory on purpose: it is per-run conversational state, not a fact about the
- * week, and /reset already clears the week between takes.
+ *  1. Nothing was asked. His first message after enrolling — "hi", "I want day
+ *     1" — was graded as the answer to a question he was never asked, burning
+ *     day 1 before the take started.
+ *
+ *  2. The question moved. He answers, the plan is revised, and a message already
+ *     in flight is graded against a day that no longer exists in that form.
+ *     Pinning the plan VERSION as well as the day means a stale answer is
+ *     re-asked rather than mis-scored.
+ *
+ *  3. Two messages at once. Channels runs turns in PARALLEL by default, so two
+ *     rapid messages both read dueStep() before either writes an attempt, and
+ *     both grade against the same day. The queue below serialises per student.
+ *
+ * In-memory on purpose: it is per-run conversational state, not a fact about
+ * the week, and /reset already clears the week between takes.
  */
-const asked = new Map<string, number>();
+const outstanding = new Map<string, { version: number; day: number }>();
 
-export async function handleStudentAnswer(thread: Thread, text: string): Promise<void> {
+/**
+ * One turn at a time, per student. Each incoming message waits for the previous
+ * one to finish before it reads any state.
+ *
+ * Without this, "sehte" and "nehmte" sent a second apart can both be recorded
+ * against day 2 — and the "same error twice" trigger then fires on one day
+ * rather than two, which is not the claim we are making on camera.
+ */
+const queues = new Map<string, Promise<void>>();
+
+function serialize(key: string, work: () => Promise<void>): Promise<void> {
+  const next = (queues.get(key) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(work);
+  queues.set(
+    key,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+/**
+ * Telegram re-delivers updates. A duplicate message posted mid-take is one of
+ * the two things that reliably ruins a recording, so claim each message id once
+ * and drop the repeat. Falls open when the adapter gives us no id — dropping
+ * real answers would be far worse than an occasional double.
+ */
+function isDuplicate(message: unknown): boolean {
+  const id = (message as { id?: string | number } | null)?.id;
+  if (id === undefined || id === null) return false;
+  const numeric = typeof id === "number" ? id : hash(String(id));
+  return !store.claimUpdate(numeric);
+}
+
+function hash(value: string): number {
+  let h = 0;
+  for (let i = 0; i < value.length; i += 1) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+export async function handleStudentAnswer(
+  thread: Thread,
+  text: string,
+  message?: unknown,
+): Promise<void> {
+  if (message !== undefined && isDuplicate(message)) return;
+  return serialize(STUDENT_ID, () => studentTurn(thread, text));
+}
+
+async function studentTurn(thread: Thread, text: string): Promise<void> {
+  const plan = store.latestPlan(STUDENT_ID);
   const step = store.dueStep(STUDENT_ID);
 
-  if (!step) {
-    const plan = store.latestPlan(STUDENT_ID);
+  if (!step || !plan) {
+    outstanding.delete(STUDENT_ID);
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -119,17 +180,23 @@ export async function handleStudentAnswer(thread: Thread, text: string): Promise
     return;
   }
 
-  const answered = store.attemptsFor(STUDENT_ID);
+  const pending = outstanding.get(STUDENT_ID);
 
-  // Nothing was asked, so nothing can be an answer. Ask.
-  if (asked.get(STUDENT_ID) !== step.day) {
-    asked.set(STUDENT_ID, step.day);
+  // Grade ONLY a reply to the exact question we asked, from the plan version we
+  // asked it under. Anything else — first contact, a revised plan, a message
+  // that arrived while the week moved — gets asked, not scored.
+  if (!pending || pending.day !== step.day || pending.version !== plan.version) {
+    outstanding.set(STUDENT_ID, { version: plan.version, day: step.day });
     await thread.post(ask(step));
     return;
   }
 
-  // Grading, evidence and any revision all happen in agent-core. Exact
-  // normalised comparison runs FIRST; the model only sees a miss.
+  // Claim the question before any await. A second message cannot now be graded
+  // against the same day even if it slips past the queue.
+  outstanding.delete(STUDENT_ID);
+
+  const answeredBefore = store.attemptsFor(STUDENT_ID);
+
   const { attempt, trigger, revised_plan } = await recordStudentTurn({
     student_id: STUDENT_ID,
     day: step.day,
@@ -145,7 +212,7 @@ export async function handleStudentAnswer(thread: Thread, text: string): Promise
     step,
     gave: attempt.gave,
     correct: attempt.correct,
-    streak: streak === -1 ? answered.length + 1 : streak,
+    streak: streak === -1 ? answeredBefore.length + 1 : streak,
   });
 
   await thread.post(
@@ -172,12 +239,12 @@ export async function handleStudentAnswer(thread: Thread, text: string): Promise
     );
   }
 
-  // Ask the next thing, if anything is due. One question at a time.
+  // Ask the next thing, if anything is due. One question at a time, and pinned
+  // to whichever plan version is current AFTER any revision.
+  const current = store.latestPlan(STUDENT_ID);
   const next = store.dueStep(STUDENT_ID);
-  if (next && next.day !== step.day) {
-    asked.set(STUDENT_ID, next.day);
+  if (next && current && next.day !== step.day) {
+    outstanding.set(STUDENT_ID, { version: current.version, day: next.day });
     await thread.post(ask(next));
-  } else {
-    asked.delete(STUDENT_ID);
   }
 }
