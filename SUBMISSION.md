@@ -9,24 +9,52 @@ Choose your city on the [global event page](https://aitinkerers.org/hackathons/g
 - [ ] We identify inherited templates, libraries, prompts, components, and starter code separately from our event work
 
 **What we inherited**
-<!-- Include this starter kit and any reused examples. -->
+
+The [Agents, Everywhere starter kit](docs/STARTER-KIT.md): the monorepo layout, `resolveModel`, the CopilotKit Channels wiring in `apps/channel`, and the Next.js app shell in `apps/web`. Libraries: CopilotKit Channels + Runtime, the Vercel AI SDK, Next.js, zod.
+
+The Slack incident demo the kit ships with was **deleted, not adapted** — 1,479 lines removed in the first commit of the Telegram leg.
 
 **What we built during the hackathon**
-<!-- Describe the new core interaction and point to its implementation. Running the supplied incident demo alone does not establish a new project. -->
+
+The entire product. A tutor sends one line; an agent works her student through the six days between lessons in Telegram, then composes her a briefing panel from what the week produced.
+
+| Built today | Where |
+|---|---|
+| Telegram leg — two roles on one bot, enrolment, the turn loop | `apps/channel/src/channel.tsx`, `turns.tsx` |
+| Week planning from one line | `packages/agent-core/src/llm.ts` → `planWeek` |
+| Deterministic evidence triggers | `packages/agent-core/src/evidence.ts` |
+| Mid-week plan revision | `llm.ts` → `revisePlan`, with `assertRevisionLegal` in `contracts.ts` |
+| Panel composition from a closed catalogue | `compose.ts`, `llm.ts` → `composeBrief` |
+| The seven typed components + renderer | `apps/web/src/components/between/` |
+| Telegram Mini App auth | `apps/web/src/lib/telegram-initdata.ts` |
+| Compressed demo clock | `apps/web/src/app/api/tick/`, `store.ts` |
+| The frozen contracts both sides build against | `packages/agent-core/src/contracts.ts` |
 
 ## Title and description
 
 **What you built**
-<!-- Explain the complete interaction your demo shows. -->
+
+A tutor types one line at the end of a lesson — *"Jonas — German past tense of irregular verbs, ten minutes a day. He's nervous about speaking out loud."* That is the only thing she types all week.
+
+Between plans the six days before the next lesson and works them with the student in plain Telegram chat, one question at a time. When he regularises a strong verb twice, a trigger computed in code rewrites the rest of his week — day 5 changes from a drill to an explanation — and tells him why. Five minutes before the next lesson, the tutor taps one button and gets a briefing panel composed from what the week actually produced.
 
 **Who it is for**
-<!-- Name a person in a concrete situation. -->
+
+A private tutor, language teacher or coach with around twenty weekly one-to-one clients. Her work exists for the fifty-five minutes she is in the room. Then six days of nothing, and the next lesson opens with "how did it go."
+
+Her student is a teenager with a phone. He will not install a practice app — that is *why* those six days are empty.
 
 **Why the context matters**
-<!-- What did the agent know or do because it lived in this surface? -->
+
+The six dead days **are** the context. A standalone chatbox has no student to reach: he installed nothing, created no account, and would not open a practice app. Because the agent lives in the chat app already on his phone, it reaches him on a bus in eight seconds — and it deliberately never gives him a screen to open, because that is the exact failure it exists to fix.
+
+The tutor's half is the mirror image: she is at a desk with five minutes, so she gets the one surface in the product that has a screen, and its shape changes with the week.
 
 **Sponsor technologies used**
-<!-- Name the tools you actually used and the visible contribution of each. -->
+
+**CopilotKit** — load-bearing on both legs. Channels (Telegram adapter, long-polling) carries the student conversation and renders native inline keyboards; the generative-UI half composes the tutor's panel from seven typed components. Deliberately mounted *without* its chat sidebar — a chat sidebar inside a chat app would be absurd.
+
+**OpenAI** — `gpt-4.1-mini` under structured outputs for planning, revision, the student's replies, and panel composition. The output schema and the renderer's types are one declaration.
 
 ## Evidence for the judging criteria
 
