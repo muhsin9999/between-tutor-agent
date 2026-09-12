@@ -2,10 +2,11 @@
 
 ← [BUILD.md](BUILD.md) · [STRETCH.md](STRETCH.md)
 
-**Not today.** This is a 45–60 minute job and there are 35 minutes of build left.
-Attempting it now trades a working demo for a half-migrated one. Today the bot
-runs on the laptop and the panel goes through a tunnel — the README says so
-plainly, and judges run it from a clean clone anyway.
+The Neon project and first schema now exist. The remaining application-store
+conversion is intentionally staged: the current demo keeps its JSON fallback
+until every synchronous store call has moved to async database queries. Today
+the bot runs on the laptop and the panel goes through a tunnel — the README says
+so plainly, and judges run it from a clean clone anyway.
 
 This is the plan for the moment the hackathon ends.
 
@@ -77,7 +78,9 @@ small and its whole surface is `read()` / `update()` plus a dozen helpers, so
 this is a rewrite of one file, not a refactor of the app.
 
 **Neon** — serverless Postgres, generous free tier, no card. Reachable over HTTP
-from both hosts. Four tables mirroring `Store`:
+from both hosts. The project is created in `aws-eu-central-1`; its versioned
+schema is [`packages/agent-core/sql/001_initial.sql`](../packages/agent-core/sql/001_initial.sql)
+and local setup is documented in [`docs/NEON.md`](../docs/NEON.md). Its tables mirror `Store`:
 
 ```
 students(id, name, chat_id, tutor_chat_id)

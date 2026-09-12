@@ -140,7 +140,7 @@ There is no chat sidebar in the panel. A chat sidebar inside a chat app would be
 
 Things a judge would otherwise have to discover:
 
-- **State is a JSON file on disk** (`.data/between.json`), not a database. Deliberate: it makes a clean take one `rm`. It is per-machine and not multi-user.
+- **Today’s demo state is a JSON file on disk** (`.data/between.json`), which makes a clean take one `rm`. The project now has a Neon PostgreSQL schema and setup guide in [`docs/NEON.md`](docs/NEON.md); the application store migration is the next backend step before multi-host deployment.
 - **The clock is compressed.** `DEMO_SPEED=day:40s` — six days in four minutes. Said out loud in the demo rather than left to be noticed.
 - **All fixtures are synthetic.** No real student data is in this repo, and none should be.
 - **`/student` and `/reset` are dev commands**, not part of the product. In real use the student taps an enrolment link.
