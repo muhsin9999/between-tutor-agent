@@ -1,6 +1,6 @@
 import React from "react";
 import type { BriefComponent } from "agent-core/contracts";
-import { CREAM, INK, MUTED, SANS, SERIF } from "./tokens";
+import { GUTTER, HAIRLINE, INK, MUTED, SANS, SERIF, TYPE } from "./tokens";
 
 export type QuietCardProps = Extract<BriefComponent, { type: "QuietCard" }>;
 
@@ -10,6 +10,10 @@ export type QuietCardProps = Extract<BriefComponent, { type: "QuietCard" }>;
  * No number is rendered as a number, no track is drawn with zero cells filled,
  * no chart is drawn empty. If this ever grows a metric, the back-to-back shot
  * against ErrorGrid stops reading and the product's central claim goes with it.
+ *
+ * The only thing it spends is vertical space, which is why the whitespace here
+ * is deliberately larger than anywhere else in the set: emptiness only reads as
+ * a finding if there is enough of it to look chosen.
  */
 export function QuietCard({ last_seen_day, question }: QuietCardProps) {
   const since =
@@ -21,19 +25,26 @@ export function QuietCard({ last_seen_day, question }: QuietCardProps) {
     <section
       aria-label="A quiet week"
       style={{
-        background: CREAM,
-        padding: "72px 28px 84px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 48,
+        // No fill: the page's own cream shows through, so this reads as a gap
+        // in the week rather than as a card that happens to be underfilled.
+        padding: `56px ${GUTTER}px 64px`,
+        borderTop: `1px solid ${HAIRLINE}`,
+        borderBottom: `1px solid ${HAIRLINE}`,
         fontFamily: SANS,
       }}
     >
       <p
         style={{
-          margin: "0 0 56px",
-          fontSize: 12,
+          margin: 0,
+          fontSize: TYPE.fine,
           lineHeight: 1.6,
           letterSpacing: "0.02em",
           color: MUTED,
-          maxWidth: "22em",
+          maxWidth: "24em",
+          fontVariantNumeric: "tabular-nums",
         }}
       >
         {since}
@@ -43,11 +54,13 @@ export function QuietCard({ last_seen_day, question }: QuietCardProps) {
         style={{
           margin: 0,
           fontFamily: SERIF,
-          fontSize: 26,
-          lineHeight: 1.45,
+          fontSize: "clamp(22px, 5.8vw, 26px)",
+          lineHeight: 1.4,
+          letterSpacing: "-0.01em",
           color: INK,
           maxWidth: "17em",
           fontWeight: 400,
+          textWrap: "balance",
         }}
       >
         {question}
@@ -55,8 +68,9 @@ export function QuietCard({ last_seen_day, question }: QuietCardProps) {
 
       <p
         style={{
-          margin: "56px 0 0",
-          fontSize: 11,
+          margin: 0,
+          fontSize: TYPE.micro,
+          fontWeight: 600,
           letterSpacing: "0.14em",
           textTransform: "uppercase",
           color: "#B7AE99",
