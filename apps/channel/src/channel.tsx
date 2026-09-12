@@ -24,8 +24,13 @@ const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
 const PANEL_URL = `${process.env.PUBLIC_APP_URL ?? "http://127.0.0.1:3100"}/panel`;
 
 export const channel = createChannel({
-  // No `name` — that is the Intelligence Channel Code, and this is a direct
-  // adapter. `identifyUser` still belongs here and NOT on CopilotRuntime.
+  // Required even on the direct-adapter path — the runtime throws
+  // "Intelligence Channel is missing a `name`" without it. 3–64 chars,
+  // lowercase, hyphen-separated.
+  name: process.env.CHANNEL_CODE || "between",
+
+  // Belongs HERE and not on CopilotRuntime — that one is for web requests and
+  // must be absent on a Channels-only runtime.
   identifyUser: "platform",
 
   adapters: [
@@ -54,8 +59,20 @@ export const channel = createChannel({
 
 /* ── the tutor ───────────────────────────────────────────────────────────── */
 
-channel.onCommand("tutor", async (ctx) => {
-  await ctx.thread.post(
+/**
+ * `/tutor` is handled as plain message text, NOT via channel.onCommand.
+ *
+ * onCommand makes the adapter call Telegram's setMyCommands, which 400s unless
+ * every registered command carries a non-empty description — and the failure is
+ * swallowed into a "channel failed to register commands" warning at startup
+ * rather than surfacing where you'd look for it. Telegram delivers "/tutor" as
+ * ordinary message text regardless, so this costs nothing and removes a whole
+ * class of startup failure.
+ */
+async function postTutorWelcome(thread: {
+  post: (ui: unknown) => Promise<unknown>;
+}): Promise<void> {
+  await thread.post(
     <Message accent="#16306B">
       <Section>
         <Markdown>
@@ -72,7 +89,7 @@ channel.onCommand("tutor", async (ctx) => {
       </Actions>
     </Message>,
   );
-});
+}
 
 /* ── everyone ────────────────────────────────────────────────────────────── */
 
@@ -90,6 +107,31 @@ channel.onWelcome(async ({ thread }) => {
   );
 });
 
-channel.onMessage(async ({ thread }) => {
+channel.onMessage(async ({ thread, message }) => {
+  const text = (message.text ?? "").trim();
+
+  if (text.startsWith("/tutor")) {
+    await postTutorWelcome(thread as never);
+    return;
+  }
+
+  // `/start` and `/start <token>` — enrolment. The student taps a link from his
+  // tutor and is in. No app, no account, no password: that is the product.
+  if (text.startsWith("/start")) {
+    const token = text.slice("/start".length).trim();
+    await thread.post(
+      <Message accent="#F5A623">
+        <Section>
+          <Markdown>
+            {token
+              ? `You're in. Your tutor set this week's practice — about ten minutes a day, right here.\n\nI'll ask you the first thing shortly.`
+              : `I'm **Between**. Your tutor sets the week; I keep you company through it.\n\nIf you have a link from your tutor, tap it to start.`}
+          </Markdown>
+        </Section>
+      </Message>,
+    );
+    return;
+  }
+
   await thread.runAgent();
 });

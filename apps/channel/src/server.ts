@@ -52,14 +52,39 @@ teardown = async () => {
 
 await channels.ready({ timeoutMs: 30_000 });
 
-// `ready()` is NOT proof of life — it resolves on a degraded state too. Skip
-// this and you get a process that boots cleanly, serves 200s, and answers
-// nothing.
+// `ready()` is NOT proof of life — it resolves on a degraded state too.
+//
+// But "online" is the wrong bar for us. Intelligence only declares `slack` and
+// `teams` as managed providers, so a Telegram Channel is permanently
+// `provider: "channel_not_declared"` — there is no dashboard entry that would
+// ever satisfy it. What matters is `transport`, because OUR adapter long-polls
+// Telegram directly and never waits to be dialled.
+//
+// So: accept an online transport with an undeclared provider, and reject
+// anything else. Loosen this further and you get a process that boots cleanly,
+// serves 200s, and answers nothing.
 const status = channels.status();
-if (status.overall !== "online") {
-  console.error(`\n  Channel is not online: ${JSON.stringify(status)}\n`);
+const detail = Object.values(status.detail ?? {}) as {
+  transport?: string;
+  provider?: string;
+}[];
+const transportUp =
+  detail.length > 0 && detail.every((d) => d.transport === "online");
+const onlyUndeclared = detail.every(
+  (d) => d.provider === undefined || d.provider === "channel_not_declared",
+);
+
+if (status.overall !== "online" && !(transportUp && onlyUndeclared)) {
+  console.error(`\n  Channel is not usable: ${JSON.stringify(status)}\n`);
   await teardown();
   process.exit(1);
+}
+
+if (status.overall !== "online") {
+  console.log(
+    `\n  note: Intelligence reports the provider undeclared — expected for Telegram,\n` +
+      `  which it does not manage. Transport is online and the adapter polls directly.`,
+  );
 }
 
 const port = Number(process.env.PORT ?? 3000);
