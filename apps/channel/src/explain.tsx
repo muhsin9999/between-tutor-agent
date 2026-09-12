@@ -28,7 +28,8 @@
 import { Message, Section, Markdown, Context, Table, Row, Cell } from "@copilotkit/channels";
 import type { ChannelNode } from "@copilotkit/channels";
 import { normalizeAnswer } from "agent-core";
-import type { Attempt, ErrorTag, PlanDay } from "agent-core/contracts";
+import { UNTAGGED } from "agent-core/contracts";
+import type { Attempt, PlanDay } from "agent-core/contracts";
 
 /**
  * Six rows is the ceiling the phone allows; four is what reads without pushing
@@ -115,7 +116,7 @@ const byTime = (a: Attempt, b: Attempt) => Date.parse(a.answered_at) - Date.pars
 function latestMiss(attempts: readonly Attempt[], step: PlanDay): Attempt | null {
   const last = [...attempts].sort(byTime).at(-1);
   if (!last || last.day !== step.day || last.correct) return null;
-  if (last.error_tag === null || last.error_tag === "untagged") return null;
+  if (last.error_tag === null || last.error_tag === UNTAGGED) return null;
   return last;
 }
 
@@ -206,16 +207,27 @@ function rowsFor(args: {
  * One line, never a paragraph. He reads it above the keyboard, between two
  * questions, and the table underneath is doing the explaining.
  */
-const LEAD: Record<Exclude<ErrorTag, "untagged">, string> = {
+const LEAD: Record<string, string> = {
   "strong-verb-vowel": "these verbs change the vowel, they never take `-te`:",
   "wrong-auxiliary": "the auxiliary flips with this one:",
   "wrong-ending": "the stem is right, the ending is not:",
   "word-order": "right words, wrong order — the verb goes last:",
 };
 
-function tagOf(attempt: Attempt | null): Exclude<ErrorTag, "untagged"> {
+/**
+ * The tag vocabulary belongs to the plan now, so most tags will not be in LEAD —
+ * a maths week files misses under `sign-error`, a piano week under `fingering`.
+ * The written line is the tutor's own category with its hyphens taken out, which
+ * says the true thing ("the same sign error, twice") without this file pretending
+ * to know how to teach her subject.
+ */
+function leadFor(tag: string): string {
+  return LEAD[tag] ?? `the same ${tag.replace(/-/g, " ")}, twice:`;
+}
+
+function tagOf(attempt: Attempt | null): string {
   const tag = attempt?.error_tag;
-  return tag && tag !== "untagged" ? tag : "wrong-ending";
+  return tag && tag !== UNTAGGED ? tag : "wrong-ending";
 }
 
 /**
@@ -241,7 +253,7 @@ export function explainMiss(args: {
     return (
       <Message accent="#F5A623">
         <Section>
-          <Markdown>{`Twice now — ${LEAD[tag]}`}</Markdown>
+          <Markdown>{`Twice now — ${leadFor(tag)}`}</Markdown>
         </Section>
         <Table columns={[{ header: "✗" }, { header: "✓" }]}>
           <Row>
@@ -263,7 +275,7 @@ export function explainMiss(args: {
   return (
     <Message accent="#F5A623">
       <Section>
-        <Markdown>{`\`${clip(args.gave)}\` again — ${LEAD["strong-verb-vowel"]}`}</Markdown>
+        <Markdown>{`\`${clip(args.gave)}\` again — ${leadFor("strong-verb-vowel")}`}</Markdown>
       </Section>
       <Table columns={[{ header: "verb" }, { header: "✗" }, { header: "✓" }]}>
         {rows.map((row) => (

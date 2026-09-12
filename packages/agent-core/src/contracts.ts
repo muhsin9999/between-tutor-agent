@@ -21,6 +21,62 @@
 import { z } from "zod";
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   The error vocabulary — part of Contract 1, because it belongs to the PLAN.
+
+   A tag is how two wrong answers are recognised as the SAME wrong answer, which
+   is what fires the revision. It therefore has to be shaped like the subject the
+   tutor actually teaches: a maths week groups misses under sign-error and
+   factorising, a piano week under timing and fingering. `planWeek` derives the
+   set from the tutor's line; `revisePlan` carries it through unchanged.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Reserved. A miss matching none of a plan's tags, and never a plan tag itself. */
+export const UNTAGGED = "untagged";
+
+/**
+ * The German set the product was built against, now demoted to a FALLBACK for
+ * plans written before `error_tags` existed (there is live demo data in
+ * `.data/between.json`). New plans carry their own.
+ */
+export const DEFAULT_ERROR_TAGS = [
+  "strong-verb-vowel", // sehte / nehmte — regularised a strong verb
+  "wrong-auxiliary",
+  "wrong-ending",
+  "word-order",
+] as const;
+
+/** @deprecated The old closed enum, `untagged` included. Use DEFAULT_ERROR_TAGS. */
+export const ERROR_TAGS = [...DEFAULT_ERROR_TAGS, UNTAGGED] as const;
+export type ErrorTag = (typeof ERROR_TAGS)[number];
+
+/**
+ * The ONE place a plan's tag vocabulary is read. Everything that groups, counts
+ * or classifies misses goes through here, so the back-compat fallback exists
+ * once rather than at every call site.
+ */
+export function errorTagsOf(plan: { error_tags?: string[] } | null | undefined): string[] {
+  const tags = (plan?.error_tags ?? []).filter((tag) => tag && tag !== UNTAGGED);
+  return tags.length ? [...new Set(tags)] : [...DEFAULT_ERROR_TAGS];
+}
+
+/**
+ * A model writes these, so they are cleaned rather than trusted: kebab-cased,
+ * de-duplicated, `untagged` dropped, capped at six. Falls back rather than
+ * throwing — a plan with an unusable tag set is worth less than a plan with the
+ * default one, and this runs on the tutor's only input of the week.
+ */
+export function normalizeErrorTags(tags: readonly string[] | undefined): string[] {
+  const cleaned = [
+    ...new Set(
+      (tags ?? [])
+        .map((tag) => tag.toLowerCase().trim().replace(/[\s_]+/g, "-").replace(/[^a-z0-9-]/g, ""))
+        .filter((tag) => tag.length > 0 && tag !== UNTAGGED),
+    ),
+  ].slice(0, 6);
+  return cleaned.length >= 2 ? cleaned : [...DEFAULT_ERROR_TAGS];
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    Contract 1 — the plan document
    A week is six days. The tutor's one line produces `days`; a revision rewrites
    only the days that haven't happened yet and stores a new version beside the
@@ -46,12 +102,41 @@ export const PLAN_DAY_SCHEMA = z.object({
 });
 export type PlanDay = z.infer<typeof PLAN_DAY_SCHEMA>;
 
+/**
+ * The vocabulary a week's mistakes are grouped under — 3–6 tags, produced from
+ * the tutor's one line, lowercase-kebab, and specific to HER subject.
+ *
+ * This is a property of the PLAN, not a global constant, and that is the whole
+ * point: "strong-verb-vowel" is meaningless to a maths tutor, and a fixed German
+ * enum meant every wrong answer outside German fell to `untagged` — which
+ * `detectEvidence` skips, so the plan never revised. See DEFAULT_ERROR_TAGS.
+ *
+ * `min(3).max(6)` and `describe` both reach the model: these constraints are the
+ * prompt as much as the schema.
+ */
+export const ERROR_TAGS_SCHEMA = z
+  .array(z.string())
+  .min(3)
+  .max(6)
+  .describe(
+    "3-6 mistake types a student actually makes in THIS subject, lowercase-kebab-case. " +
+      "Never include 'untagged' — it is reserved for a miss that matches none of these.",
+  );
+
 export const PLAN_SCHEMA = z.object({
   student_id: z.string(),
   version: z.number().int().min(1).describe("1, 2, 3 … never overwritten."),
   reason: z.string().describe("ONE sentence. v1 is 'initial plan from tutor's brief'."),
   created_at: z.string().describe("ISO timestamp."),
   days: z.array(PLAN_DAY_SCHEMA).length(6).describe("Always exactly six."),
+  // Optional ON THE STORED DOCUMENT, and deliberately so: `.data/between.json`
+  // holds plans written before this field existed and they must keep loading.
+  // Read it through `errorTagsOf(plan)`, never directly — that is the one place
+  // the fallback to DEFAULT_ERROR_TAGS lives.
+  error_tags: ERROR_TAGS_SCHEMA.optional().refine(
+    (tags) => !tags?.includes(UNTAGGED),
+    `'${UNTAGGED}' is reserved and must never be one of a plan's error_tags.`,
+  ),
 });
 export type Plan = z.infer<typeof PLAN_SCHEMA>;
 
@@ -59,6 +144,9 @@ export type Plan = z.infer<typeof PLAN_SCHEMA>;
 export const PLAN_DAYS_SCHEMA = z.object({
   days: z.array(PLAN_DAY_SCHEMA).length(6),
   reason: z.string(),
+  // Required here, unlike on PLAN_SCHEMA: the model must always name the week's
+  // mistake vocabulary, and strict structured outputs reject optional fields.
+  error_tags: ERROR_TAGS_SCHEMA,
 });
 
 /**
@@ -179,20 +267,6 @@ export function assertBriefLegal(brief: Brief): void {
    Contract 3 — the student turn
    ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Closed list. `ErrorGrid` groups by this and the "same tag twice" trigger fires
- * on it — a free-text tag makes the grid unusable and the trigger unfireable.
- * Lives here rather than in evidence.ts because both lanes read it.
- */
-export const ERROR_TAGS = [
-  "strong-verb-vowel", // sehte / nehmte — regularised a strong verb
-  "wrong-auxiliary",
-  "wrong-ending",
-  "word-order",
-  "untagged",
-] as const;
-export type ErrorTag = (typeof ERROR_TAGS)[number];
-
 export const ATTEMPT_SCHEMA = z.object({
   student_id: z.string(),
   plan_version: z.number().int().min(1),
@@ -200,7 +274,10 @@ export const ATTEMPT_SCHEMA = z.object({
   answered_at: z.string(),
   gave: z.string().describe("Raw student text, untrimmed. Normalise at compare time, not here."),
   correct: z.boolean(),
-  error_tag: z.enum(ERROR_TAGS).nullable(),
+  // Was `z.enum(ERROR_TAGS)`. The vocabulary is per-plan now, so a fixed enum
+  // here could not validate a maths attempt at all. The closed set still exists
+  // — it is `errorTagsOf(plan)` plus UNTAGGED, checked where the plan is known.
+  error_tag: z.string().nullable().describe("One of the plan's error_tags, 'untagged', or null if correct."),
 });
 export type Attempt = z.infer<typeof ATTEMPT_SCHEMA>;
 
