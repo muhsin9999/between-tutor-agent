@@ -3,20 +3,33 @@
  * creating the listener is what starts it — which is why teardown is wired
  * before the listener exists.
  *
- * This is the DIRECT adapter path, not the starter's managed one:
- * `CopilotKitIntelligence` is gone, and with it INTELLIGENCE_API_KEY and
- * CHANNEL_CODE. `intelligence` is optional on CopilotRuntime, and the Telegram
- * adapter long-polls out to Telegram rather than waiting to be dialled, so
- * nothing has to reach us. The HTTP server is only here to satisfy a host's
- * health check.
+ * This is the DIRECT adapter path: WE hold the Telegram token and the adapter
+ * long-polls out to Telegram, so no webhook and no public URL.
+ *
+ * An Intelligence key is still required. `CopilotRuntime` will not construct
+ * with `channels` unless `intelligence` is present — that is enforced in the
+ * types, not just documented. The runtime owns the Channel lifecycle either way;
+ * the adapter choice only decides who holds the *platform* credentials. There is
+ * no CHANNEL_CODE here because a direct-adapter Channel has no Channel Code to
+ * match — `name` is only for managed delivery.
+ *
+ * The HTTP server exists to satisfy a host's health check. Nothing arrives on it.
  */
 import { createServer } from "node:http";
-import { CopilotRuntime } from "@copilotkit/runtime/v2";
+import { CopilotKitIntelligence, CopilotRuntime } from "@copilotkit/runtime/v2";
 import { createCopilotNodeListener } from "@copilotkit/runtime/v2/node";
 import { channel } from "./channel";
+import { required } from "./env";
+
+const intelligence = new CopilotKitIntelligence({
+  apiKey: required("INTELLIGENCE_API_KEY"),
+  apiUrl: process.env.INTELLIGENCE_API_URL,
+  wsUrl: process.env.INTELLIGENCE_GATEWAY_WS_URL,
+});
 
 const runtime = new CopilotRuntime({
   agents: {}, // required even though the Channel supplies the agent
+  intelligence,
   channels: [channel],
 });
 
