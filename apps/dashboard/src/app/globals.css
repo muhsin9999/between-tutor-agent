@@ -3,32 +3,46 @@
 /*
  * Between — dashboard design tokens.
  *
- * Dark-first. The panel a tutor opens on her phone is warm cream; this is the
- * desk surface she works at, and it holds more information at once, so it
- * carries less light and more contrast.
+ * PAPER, not a dark SaaS shell.
  *
- * Amber is identity. Semantic colour (quiet / stuck / ahead) is separate from
- * it and never doubles as accent.
+ * The first pass was deep navy with an amber accent. That is the default look
+ * every AI-built dashboard arrives in, and worse, it did not match the tutor's
+ * panel — which is warm paper and reads far better. This is a tool a teacher
+ * opens on a Sunday night to decide who needs her; it should feel like a
+ * well-set page, not a trading terminal.
+ *
+ * So: warm paper ground, white cards, near-black ink, hairline rules.
+ *
+ * COLOUR MEANS STATUS. There is no decorative accent competing with it. If
+ * something on this page is coloured, it is telling you a student needs
+ * attention. Amber appears only as the brand mark and the primary action.
+ *
+ * Token NAMES are unchanged from the first pass so every component keeps
+ * working; only the values moved.
  */
 @theme {
-  --color-ink-900: #070E20;
-  --color-ink-850: #0B1733;
-  --color-ink-800: #101F42;
-  --color-ink-700: #172B57;
-  --color-ink-600: #223A6E;
-  --color-line:    #1E3059;
+  /* Surfaces, lightest to heaviest. */
+  --color-ink-900: #FBF8F1;   /* page ground — warm paper */
+  --color-ink-850: #FFFFFF;   /* cards */
+  --color-ink-800: #F5F1E8;   /* inset / hover */
+  --color-ink-700: #EDE8DC;   /* pressed */
+  --color-ink-600: #DDD6C6;   /* heavy divider */
+  --color-line:    #E7E1D4;   /* hairline */
 
-  --color-cream:      #F4EFE2;
-  --color-cream-dim:  #A9B4CE;
-  --color-cream-faint:#6F7C9C;
+  /* Ink. Warm-biased near-black, never pure #000. */
+  --color-cream:       #1C2331;
+  --color-cream-dim:   #5B6273;
+  --color-cream-faint: #8C8578;
 
-  --color-amber:      #F5A623;
-  --color-amber-soft: #F8C16B;
+  /* The mark and the primary action. Sparingly. */
+  --color-amber:      #B0700F;
+  --color-amber-soft: #F5A623;
 
-  --color-quiet:    #E5484D;
-  --color-stuck:    #F5A623;
-  --color-ahead:    #3DD68C;
-  --color-ontrack:  #7C88A6;
+  /* Status. The only other colour on the page. */
+  --color-quiet:   #A83E2B;
+  --color-stuck:   #B0700F;
+  --color-ahead:   #2E6B4C;
+  --color-ontrack: #6B7280;
 
   --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Instrument Serif", Georgia, serif;
@@ -37,7 +51,7 @@
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
-:root { color-scheme: dark; }
+:root { color-scheme: light; }
 
 html, body {
   background: var(--color-ink-900);
@@ -50,13 +64,22 @@ body {
   margin: 0;
 }
 
-::selection { background: var(--color-amber); color: #0B1733; }
+::selection { background: var(--color-amber-soft); color: #1C2331; }
 
-/* Focus: visible, on-brand, never the browser default ring. */
+/* Visible, on-brand, never the browser default. */
 :focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/*
+ * Cards sit on paper, so they need edge definition rather than elevation.
+ * A hairline plus a whisper of shadow reads as a sheet; a heavy drop shadow
+ * reads as a template.
+ */
+.sheet {
+  box-shadow: 0 1px 2px rgb(28 35 49 / 0.04);
 }
 
 /* Entry stagger. Decorative only — never blocks interaction. */

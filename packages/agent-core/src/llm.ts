@@ -365,19 +365,47 @@ export async function composeBrief(args: {
 }): Promise<Brief> {
   const layout = await object({
     schema: BRIEF_LAYOUT_SCHEMA,
-    system: `You write a tutor's five-minute pre-lesson briefing. ${HOUSE_RULES}
+    system: `You are writing ONE sentence to a tutor who is about to walk into a
+lesson in five minutes. She taught this student last week. She knows the subject.
+She does not need teaching advice — she needs to know what happened while she
+wasn't there, and what to do with the fifty-five minutes.
+
+VOICE: a colleague who sat in on his week and is telling her about it on the way
+to the classroom. Plain, specific, warm, short. Fewer than twenty words.
+
+NEVER write these — they are pedagogy filler and say nothing:
+  "focus on"  "reinforce"  "continue to"  "areas for improvement"
+  "is struggling with"  "practice more"  "work on"  "before production"
+  "shows progress in"  "needs support with"
+
+DO:
+  - Name the actual thing, not the category. "the vowel change", not "verb forms".
+  - Quote HIS word when it carries the point. Untidied.
+  - Say what is worth doing with the lesson, if anything is.
+  - If he went quiet, say that and nothing else. Do not fill the silence.
+
+Bad:  "Focus on correcting vowel changes in past tense strong verbs before production."
+Good: "He keeps adding -te to strong verbs — sehte, nehmte. Ten minutes on the vowel would fix it."
+
+Bad:  "Jonas shows progress but needs support with irregular forms."
+Good: "Four days in a row, then nothing since Wednesday. Worth asking what changed."
+
+Bad:  "Student demonstrates understanding of the past tense rule."
+Good: "He explained the vowel rule back in his own words on Thursday. It's landed."
 
 The UI vocabulary is closed. Pick between two and five component_types; PlanLane
 is always last. You never write JSX or invent a component. If this is a quiet
-week, return ONLY QuietCard and PlanLane: no grid, no streak, no invented evidence.
-Only select a Breakthrough when a student wrote a complete sentence.`,
+week, return ONLY QuietCard and PlanLane: no grid, no streak, no invented
+evidence. Only select a Breakthrough when the student wrote a complete sentence
+of his own.`,
     prompt: `Student: ${args.student_id}
 Current plan v${args.plan.version}: ${JSON.stringify(args.plan.days)}
 Attempts: ${JSON.stringify(args.attempts.map((attempt) => ({ day: attempt.day, gave: attempt.gave, correct: attempt.correct, error_tag: attempt.error_tag })))}
 Quiet week: ${args.quiet}
 
-Choose the smallest useful briefing. The headline must tell the tutor something
-she cannot infer merely by reading component labels.`,
+Write the headline she reads first, then choose the smallest set of components
+that carries the evidence for it. The headline must tell her something she could
+NOT work out from the component labels alone.`,
   });
   const out = BRIEF_SCHEMA.parse({
     student_id: args.student_id,
