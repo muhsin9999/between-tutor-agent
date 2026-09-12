@@ -14,14 +14,14 @@ say it out loud. Never reach across.
 ## Now
 
 > **`npm install` had never been run** — done at 13:05, lockfile committed. Pull before you start.
-> `.env` created from the example; Muhsin's `TELEGRAM_BOT_TOKEN` slot is in there waiting.
+> `.env` created from the example; the `TELEGRAM_BOT_TOKEN` slot is in there waiting.
 
 | | |
 |---|---|
 | Block | **Gate 0** |
 | Clock | 12:50 → 13:10 |
-| A · Muhsin is on | A1 Telegram adapter spike |
-| B · Mcjethro is on | B1 prove the key (needs the key pasted into .env) |
+| A · Mcjethro is on | A1 Telegram adapter spike |
+| B · Muhsin is on | B1 prove the key (needs the key pasted into .env) |
 | Next gate | 13:10 — all five [Gate 0 exit criteria](GATE-0.md#gate-0-exit-criteria) said out loud |
 
 ## Gate 0
@@ -31,7 +31,7 @@ say it out loud. Never reach across.
 | A1 transport decided — (a) (b) or (c) | A | ⬜ | |
 | A2 bot + Mini App URL registered | A | ⬜ | |
 | A3 Telegram Desktop logged in | A | ⬜ | |
-| B1 real completion came back | B | ⬜ | provider: |
+| B1 real completion came back | B | ✅ | openai · gpt-4.1-mini · ~5s |
 | B2 `contracts.ts` typechecks both apps | B | ✅ | 7 tests pin the closed-catalogue + quiet-week rules |
 | `.env` + `.data/` gitignored | either | ✅ | verified |
 
@@ -48,7 +48,7 @@ say it out loud. Never reach across.
 | T-A7 | The seven components 🤖 | agent | ⬜ |
 | T-B0 | `llm.ts` on the AI SDK (`generateObject`) | B | ✅ |
 | T-B1 | `store.ts` | B | ✅ | 
-| T-B2 | `planWeek()` | B | 🟨 written, never called live — needs the key |
+| T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ⬜ |
 | T-B4 | `evidence.ts` triggers + grading order | B | ⬜ |
 | T-B5 | **`revisePlan()`** — never cut | B | 🟨 written + legality-checked, not called live |

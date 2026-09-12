@@ -14,7 +14,7 @@ Everything here is **synthetic.** Never commit real personal data to a public re
 
 ## The tutor's opening line — type it exactly
 
-> **Jonas — past tense of irregular verbs, ten minutes a day. He's nervous about speaking out loud.**
+> **Jonas — German past tense of irregular verbs, ten minutes a day. He's nervous about speaking out loud.**
 
 One line. That is the only thing she types all week, and it is the pitch.
 

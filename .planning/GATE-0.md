@@ -10,7 +10,7 @@ Mark results in [STATUS.md](STATUS.md) as you go.
 
 ---
 
-## A · Muhsin — the surface
+## A · Mcjethro — the surface
 
 ### A1 · Telegram adapter spike — **8 minutes, hard stop** 🔴 P0
 
@@ -64,7 +64,7 @@ and it films far better than two people crowding one screen.
 
 ---
 
-## B · Mcjethro — the engine
+## B · Muhsin — the engine
 
 ### B1 · Prove the model key with a real call — **3 minutes** 🔴 P0
 

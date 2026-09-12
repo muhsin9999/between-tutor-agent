@@ -19,7 +19,8 @@
  * never `.optional()`. Strict structured outputs require every property in
  * `required`, and an optional field fails at REQUEST time, not typecheck time.
  */
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { resolveModel } from "./model";
 import {
@@ -30,6 +31,33 @@ import {
   type PlanDay,
 } from "./contracts";
 
+/**
+ * resolveModel() returns a model INSTANCE for OpenRouter but a bare
+ * "provider:model" STRING otherwise — and in AI SDK v6 a bare string is routed
+ * through the Vercel AI Gateway, which wants its own AI_GATEWAY_API_KEY and
+ * fails with GatewayAuthenticationError even though OPENAI_API_KEY is perfectly
+ * good. So build a real provider instance here instead of passing the string on.
+ *
+ * Anything else calling an AI SDK function with resolveModel() directly will hit
+ * the same wall.
+ */
+function model(): LanguageModel {
+  const resolved = resolveModel();
+  if (typeof resolved !== "string") return resolved; // OpenRouter: already an instance
+
+  const separator = resolved.indexOf(":");
+  const provider = resolved.slice(0, separator);
+  const modelId = resolved.slice(separator + 1);
+
+  if (provider === "openai") {
+    return createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })(modelId);
+  }
+  throw new Error(
+    `llm.ts talks to openai and openrouter. MODEL_PROVIDER='${provider}' needs its ` +
+      `provider package added here — see .planning/GATE-0.md B1 for the fallback.`,
+  );
+}
+
 /** One call site, so a provider failure reads the same wherever it happens. */
 async function object<T extends z.ZodType>(opts: {
   schema: T;
@@ -39,7 +67,7 @@ async function object<T extends z.ZodType>(opts: {
 }): Promise<z.infer<T>> {
   try {
     const { object } = await generateObject({
-      model: resolveModel(),
+      model: model(),
       schema: opts.schema,
       system: opts.system,
       prompt: opts.prompt,

@@ -1,4 +1,4 @@
-# Lane A · Muhsin — the surface · Telegram + the panel shell
+# Lane A · Mcjethro — the surface · Telegram + the panel shell
 
 ← [BUILD.md](BUILD.md) · contracts: [CONTRACTS.md](CONTRACTS.md) · script: [FIXTURES.md](FIXTURES.md) · delegating: [AGENT-PROMPTS.md](AGENT-PROMPTS.md)
 

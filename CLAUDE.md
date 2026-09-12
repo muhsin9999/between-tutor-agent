@@ -23,7 +23,7 @@ is the entry point and the only file that tells you what to do next.**
 |---|---|
 | Control room, timeline, file ownership | `.planning/BUILD.md` |
 | The frozen types | `.planning/CONTRACTS.md` → `packages/agent-core/src/contracts.ts` |
-| Per-person tasks | `.planning/LANE-A.md` (Muhsin) · `.planning/LANE-B.md` (Mcjethro) |
+| Per-person tasks | `.planning/LANE-A.md` (Mcjethro) · `.planning/LANE-B.md` (Muhsin) |
 | Demo script, fixtures | `.planning/FIXTURES.md` |
 | What to drop and when | `.planning/CUTS.md` |
 | Live state | `.planning/STATUS.md` |
