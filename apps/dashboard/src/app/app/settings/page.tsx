@@ -11,17 +11,46 @@
  * behind their own rule, their own colour, and eventually their own
  * confirmation step.
  */
+import { headers } from "next/headers";
 import { store } from "agent-core";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { getSession } from "@/lib/auth";
 import { stagger } from "../_need";
+import { LinkTelegram } from "./link-telegram";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
+/**
+ * Dates are formatted here, on the server, with an explicit locale and zone.
+ * `LinkTelegram` is a client component, and a date formatted on both sides of
+ * the boundary is a hydration mismatch waiting for the first tutor in a
+ * different time zone.
+ */
+const WHEN = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+export default async function SettingsPage() {
   const state = store.read();
   const students = Object.values(state.students);
   const tutorChat = state.tutor.chat_id;
+
+  const session = await getSession(await headers());
+  const telegramUserId = session?.user.telegramUserId ?? null;
+
+  /**
+   * There is no `telegram_linked_at` column yet, and adding one is a migration.
+   * `updatedAt` is the closest honest answer: writing the link is what last
+   * touched this row, so for a linked tutor it is the moment she tapped.
+   */
+  const linkedAt =
+    telegramUserId && session?.user.updatedAt
+      ? WHEN.format(new Date(session.user.updatedAt))
+      : null;
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10 md:px-10 md:py-14">
@@ -37,11 +66,11 @@ export default function SettingsPage() {
         <h2 className="text-xs uppercase tracking-[0.14em] text-cream-faint">Account</h2>
 
         <Card className="mt-4 p-5">
-          <Field label="Signed in as" value="Not signed in" />
-          <Field label="Email" value="—" />
+          <Field label="Signed in as" value={session?.user.name?.trim() || "—"} />
+          <Field label="Email" value={session?.user.email ?? "—"} />
           <p className="mt-4 border-t border-line pt-4 text-sm leading-relaxed text-cream-dim">
-            Magic-link sign-in is not wired yet. Until it is, this app trusts whoever opens it on
-            this machine — which is fine for a prototype and not fine for a second tutor.
+            This is the browser door. The other one is Telegram, below — and until the two are
+            connected they are two accounts that happen to belong to the same person.
           </p>
         </Card>
       </section>
@@ -49,6 +78,20 @@ export default function SettingsPage() {
       {/* ── telegram ─────────────────────────────────────────────────────── */}
       <section className="rise mt-10" style={stagger(2)}>
         <h2 className="text-xs uppercase tracking-[0.14em] text-cream-faint">Telegram</h2>
+        <p className="mt-2 max-w-prose text-sm leading-relaxed text-cream-dim">
+          Two doors, one account. This is the join: until it is made, the tutor signed in here and
+          the tutor the bot talks to are, as far as the database is concerned, two different people.
+        </p>
+
+        <LinkTelegram
+          connected={Boolean(telegramUserId)}
+          telegramUserId={telegramUserId}
+          linkedAt={linkedAt}
+        />
+
+        <h3 className="mt-8 text-xs uppercase tracking-[0.14em] text-cream-faint">
+          The chat the brief goes to
+        </h3>
 
         <Card className="mt-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">

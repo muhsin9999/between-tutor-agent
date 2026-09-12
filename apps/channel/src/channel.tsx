@@ -33,6 +33,7 @@ import {
   handleTutorLine,
 } from "./turns";
 import { extractVoice } from "./voice";
+import { handleLinkStart, isLinkStart, linkFailed, linkedConfirmation } from "./link";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
@@ -111,7 +112,18 @@ const startCommand = defineChannelCommand({
   description: "Begin, or join with your tutor's link",
   async handler({ thread, text }) {
     const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
-    const tutorChatId = Number((text ?? "").trim());
+    const payload = (text ?? "").trim();
+
+    // A tutor connecting her web account: /start link_<signed token>. Checked
+    // before the student-invite path, because the two share one entry point and
+    // a link token is not a tutor chat id.
+    if (isLinkStart(payload)) {
+      const linked = await handleLinkStart(payload, chatId);
+      await thread.post(linked.ok ? linkedConfirmation(linked.name) : linkFailed(linked.reason));
+      return;
+    }
+
+    const tutorChatId = Number(payload);
     const validInvite = Number.isSafeInteger(tutorChatId) && tutorChatId === (await store.read()).tutor.chat_id;
     if (validInvite) pendingEnrollments.set(chatId, { tutorChatId });
     await thread.post(
