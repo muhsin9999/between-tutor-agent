@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node --env-file-if-exists=../../.env ../../node_modules/next/dist/bin/next dev --turbopack -p 3200 -H 127.0.0.1",
+    "dev": "node --env-file-if-exists=../../env ../../node_modules/next/dist/bin/next dev --turbopack -p 3200 -H 127.0.0.1",
     "build": "next build",
     "typecheck": "tsc --noEmit"
   },
