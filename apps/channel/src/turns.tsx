@@ -8,7 +8,7 @@
  * talking, what to say back, and how it looks in Telegram.
  */
 import { Message, Section, Markdown, Context } from "@copilotkit/channels";
-import { planWeek, nextStep, recordStudentTurn, store } from "agent-core";
+import { planWeek, nextStep, recordStudentTurn, persistence as store } from "agent-core";
 import type { PlanDay } from "agent-core/contracts";
 
 type Thread = {
@@ -53,8 +53,8 @@ export async function handleTutorLine(
   }
 
   const plan = await planWeek({ student_id: studentId, tutor_line: line });
-  store.addPlan(plan);
-  store.startClock();
+  await store.addPlan(plan);
+  await store.startClock();
 
   await thread.post(
     <Message accent="#16306B">
@@ -139,11 +139,11 @@ function serialize(key: string, work: () => Promise<void>): Promise<void> {
  * and drop the repeat. Falls open when the adapter gives us no id — dropping
  * real answers would be far worse than an occasional double.
  */
-function isDuplicate(message: unknown): boolean {
+async function isDuplicate(message: unknown): Promise<boolean> {
   const id = (message as { id?: string | number } | null)?.id;
   if (id === undefined || id === null) return false;
   const numeric = typeof id === "number" ? id : hash(String(id));
-  return !store.claimUpdate(numeric);
+  return !(await store.claimUpdate(numeric));
 }
 
 function hash(value: string): number {
@@ -158,13 +158,13 @@ export async function handleStudentAnswer(
   text: string,
   message?: unknown,
 ): Promise<void> {
-  if (message !== undefined && isDuplicate(message)) return;
+  if (message !== undefined && await isDuplicate(message)) return;
   return serialize(studentId, () => studentTurn(thread, studentId, text));
 }
 
 async function studentTurn(thread: Thread, studentId: string, text: string): Promise<void> {
-  const plan = store.latestPlan(studentId);
-  const step = store.dueStep(studentId);
+  const plan = await store.latestPlan(studentId);
+  const step = await store.dueStep(studentId);
 
   if (!step || !plan) {
     outstanding.delete(studentId);
@@ -197,7 +197,7 @@ async function studentTurn(thread: Thread, studentId: string, text: string): Pro
   // against the same day even if it slips past the queue.
   outstanding.delete(studentId);
 
-  const answeredBefore = store.attemptsFor(studentId);
+  const answeredBefore = await store.attemptsFor(studentId);
 
   const { attempt, trigger, revised_plan } = await recordStudentTurn({
     student_id: studentId,
@@ -205,10 +205,8 @@ async function studentTurn(thread: Thread, studentId: string, text: string): Pro
     gave: text,
   });
 
-  const streak = store
-    .attemptsFor(studentId)
-    .reverse()
-    .findIndex((a) => !a.correct);
+  const recentAttempts = await store.attemptsFor(studentId);
+  const streak = recentAttempts.reverse().findIndex((attempt) => !attempt.correct);
 
   const { reply } = await nextStep({
     step,
@@ -243,8 +241,8 @@ async function studentTurn(thread: Thread, studentId: string, text: string): Pro
 
   // Ask the next thing, if anything is due. One question at a time, and pinned
   // to whichever plan version is current AFTER any revision.
-  const current = store.latestPlan(studentId);
-  const next = store.dueStep(studentId);
+  const current = await store.latestPlan(studentId);
+  const next = await store.dueStep(studentId);
   if (next && current && next.day !== step.day) {
     outstanding.set(studentId, { version: current.version, day: next.day });
     await thread.post(ask(next));

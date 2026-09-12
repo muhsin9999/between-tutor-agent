@@ -1,6 +1,6 @@
 import { assertBriefLegal, type Attempt, type Brief, type Plan } from "./contracts";
 import { composeBrief as composeWithModel } from "./llm";
-import * as store from "./store";
+import * as store from "./persistence";
 
 function isQuietWeek(plan: Plan, attempts: Attempt[]): boolean {
   const lastSeenDay = attempts.reduce((latest, attempt) => Math.max(latest, attempt.day), 0);
@@ -41,9 +41,9 @@ export function assertBriefGrounded(brief: Brief, plan: Plan, attempts: Attempt[
 
 /** The panel route calls this; it only ever receives a validated, grounded tree. */
 export async function getBrief(student_id: string): Promise<Brief> {
-  const plan = store.latestPlan(student_id);
+  const plan = await store.latestPlan(student_id);
   if (!plan) throw new Error(`No plan exists for ${student_id}.`);
-  const attempts = store.attemptsFor(student_id);
+  const attempts = await store.attemptsFor(student_id);
   const brief = await composeWithModel({
     student_id,
     plan,

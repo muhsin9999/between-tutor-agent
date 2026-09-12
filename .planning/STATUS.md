@@ -47,7 +47,7 @@ say it out loud. Never reach across.
 | T-A6 | Mini App shell + `initData` | A | ⬜ |
 | T-A7 | The seven components 🤖 | agent | ⬜ |
 | T-B0 | `llm.ts` on the AI SDK (`generateObject`) | B | ✅ |
-| T-B1 | `store.ts` | B | 🟨 | Neon project + schema + JSON data migration ready; async runtime store switch follows |
+| T-B1 | `store.ts` | B | ✅ | Neon project + schema + async runtime persistence are live; JSON is local/test fallback |
 | T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ✅ | `GET /api/tick?now=` reports due steps; `POST` resets a rehearsal while keeping enrolment |
 | T-B4 | `evidence.ts` triggers + grading order | B | ✅ | normalised exact match first; repeat-error trigger is deterministic and tested |

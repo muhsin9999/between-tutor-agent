@@ -72,10 +72,9 @@ packages/agent-core → planWeek · nextStep · revisePlan · composeBrief · ev
 apps/mobile       →  UNUSED. Do not touch.
 ```
 
-**State is migrating to Neon Postgres.** The project, schema, and local
-`DATABASE_URL` are now in place; see [NEON.md](../docs/NEON.md). The synchronous
-JSON store remains the local fallback until its callers move to async queries.
-Do not split the bot and panel onto separate hosts until that store switch lands.
+**State runs on Neon Postgres when `DATABASE_URL` is configured.** The bot,
+panel, and roster share the async persistence boundary; JSON remains only as the
+no-credential local/test fallback. See [NEON.md](../docs/NEON.md).
 
 ## File ownership — the rule that stops you colliding
 

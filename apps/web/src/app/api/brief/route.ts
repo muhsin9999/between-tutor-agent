@@ -9,7 +9,7 @@
  * building, which is the only way to iterate on seven components at any speed.
  */
 import { NextResponse } from "next/server";
-import { getBrief, store } from "agent-core";
+import { getBrief, persistence as store } from "agent-core";
 import { verifyInitData } from "../../../lib/telegram-initdata";
 
 const DEFAULT_STUDENT = "jonas";
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
 
   // She opened the panel from her own chat, so the tutor row is who she is.
-  const tutorChat = store.read().tutor.chat_id;
+  const tutorChat = (await store.read()).tutor.chat_id;
   if (tutorChat !== null && auth.user.id !== tutorChat) {
     return NextResponse.json({ error: "this panel belongs to another tutor" }, { status: 403 });
   }
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 }
 
 async function briefResponse(studentId: string, tutorName?: string) {
-  const plan = store.latestPlan(studentId);
+  const plan = await store.latestPlan(studentId);
   if (!plan) {
     return NextResponse.json(
       { error: "no week yet — the tutor hasn't sent her line" },
@@ -56,13 +56,13 @@ async function briefResponse(studentId: string, tutorName?: string) {
     return NextResponse.json({
       brief,
       tutor_name: tutorName,
-      student: store.read().students[studentId]?.name ?? studentId,
-      plan_versions: store.planHistory(studentId).map((p) => p.version),
+      student: (await store.read()).students[studentId]?.name ?? studentId,
+      plan_versions: (await store.planHistory(studentId)).map((p) => p.version),
       // PlanLane's one-sentence reason is the single most important thing in the
       // panel — it IS the agency claim. It lives on Plan, not on Brief, so the
       // page has to forward it explicitly or it never renders.
       plan_reason: plan.reason,
-      day: store.currentDay(),
+      day: store.currentDay(new Date(), await store.read()),
     });
   } catch (cause) {
     // A brief that fails validation must not render blank — that is the whole

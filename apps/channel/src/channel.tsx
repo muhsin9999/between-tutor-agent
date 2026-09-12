@@ -24,7 +24,7 @@ import {
   Button,
 } from "@copilotkit/channels";
 import { telegram } from "@copilotkit/channels/telegram";
-import { store } from "agent-core";
+import { persistence as store } from "agent-core";
 import { makeChannelAgent } from "./agent";
 import { chatIdFrom, handleStudentAnswer, handleTutorLine } from "./turns";
 import { required } from "./env";
@@ -33,10 +33,10 @@ const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
 const PANEL_URL = `${process.env.PUBLIC_APP_URL ?? "http://127.0.0.1:3100"}/panel`;
 const pendingEnrollments = new Map<number, { tutorChatId: number }>();
 
-function studentNamed(line: string) {
+async function studentNamed(line: string) {
   const name = line.split(/[—–-]/, 1)[0]?.trim().toLowerCase();
   if (!name) return undefined;
-  return Object.values(store.read().students).find((student) => student.name.toLowerCase() === name);
+  return Object.values((await store.read()).students).find((student) => student.name.toLowerCase() === name);
 }
 
 /* ── commands ────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ const tutorCommand = defineChannelCommand({
   description: "Set yourself up as the tutor",
   async handler({ thread }) {
     const tutorChatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
-    store.setTutorChat(tutorChatId);
+    await store.setTutorChat(tutorChatId);
     await thread.post(
       <Message accent="#16306B">
         <Section>
@@ -92,7 +92,7 @@ const startCommand = defineChannelCommand({
   async handler({ thread, text }) {
     const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
     const tutorChatId = Number((text ?? "").trim());
-    const validInvite = Number.isSafeInteger(tutorChatId) && tutorChatId === store.read().tutor.chat_id;
+    const validInvite = Number.isSafeInteger(tutorChatId) && tutorChatId === (await store.read()).tutor.chat_id;
     if (validInvite) pendingEnrollments.set(chatId, { tutorChatId });
     await thread.post(
       <Message accent="#F5A623">
@@ -125,8 +125,8 @@ const studentCommand = defineChannelCommand({
     // public type, but the handle is the same object.
     const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
     const studentId = `s${chatId}`;
-    store.upsertStudent({ id: studentId, name: "Jonas", chat_id: chatId });
-    const plan = store.latestPlan(studentId);
+    await store.upsertStudent({ id: studentId, name: "Jonas", chat_id: chatId });
+    const plan = await store.latestPlan(studentId);
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -145,7 +145,7 @@ const resetCommand = defineChannelCommand({
   name: "reset",
   description: "Clear the week and start a fresh take (testing)",
   async handler({ thread }) {
-    store.resetDemo();
+    await store.resetDemo();
     await thread.post(
       <Message accent="#16306B">
         <Section>
@@ -222,7 +222,7 @@ channel.onMessage(async ({ thread, message }) => {
   if (!text) return;
 
   const chatId = chatIdFrom(thread.conversationKey);
-  const state = store.read();
+  const state = await store.read();
   const tutorChat = state.tutor.chat_id;
 
   const pending = pendingEnrollments.get(chatId);
@@ -233,26 +233,26 @@ channel.onMessage(async ({ thread, message }) => {
       return;
     }
     const studentId = `s${chatId}`;
-    store.upsertStudent({ id: studentId, name, chat_id: chatId });
+    await store.upsertStudent({ id: studentId, name, chat_id: chatId });
     pendingEnrollments.delete(chatId);
     await thread.post(<Message accent="#F5A623"><Section><Markdown>{`You're in, ${name}. I'll practise with you here when your tutor sets your week.`}</Markdown></Section></Message>);
     return;
   }
 
-  const student = store.studentByChat(chatId);
+  const student = await store.studentByChat(chatId);
   if (student) {
     await handleStudentAnswer(thread as never, student.id, text, message);
     return;
   }
 
   if (tutorChat === null) {
-    store.setTutorChat(chatId);
+    await store.setTutorChat(chatId);
     await thread.post(<Message accent="#16306B"><Section><Markdown>You're the tutor. First share my enrolment link with a student using `/tutor`, then send a line beginning with their name.</Markdown></Section></Message>);
     return;
   }
 
   if (chatId === tutorChat) {
-    const studentForLine = studentNamed(text);
+    const studentForLine = await studentNamed(text);
     if (!studentForLine) {
       const names = Object.values(state.students).map((student) => student.name).join(", ");
       await thread.post(<Message accent="#16306B"><Section><Markdown>{names ? `I don't recognise that student. I have: ${names}. Start your line with one of those names.` : "No students are enrolled yet. Share the link from `/tutor` first."}</Markdown></Section></Message>);

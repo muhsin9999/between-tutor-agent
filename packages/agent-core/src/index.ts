@@ -15,6 +15,7 @@ export {
 export * from "./shared";
 
 export * as store from "./store";
+export * as persistence from "./persistence";
 export { hasNeonDatabase, neonSql } from "./neon";
 export { planWeek, revisePlan, nextStep, composeBrief } from "./llm";
 export { detectEvidence, gradeAttempt, normalizeAnswer, recordStudentTurn } from "./evidence";

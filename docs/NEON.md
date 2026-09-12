@@ -55,7 +55,6 @@ This is idempotent and keeps append-only plan and attempt history intact.
 
 ## Application migration
 
-The live hackathon demo retains `.data/between.json` while its synchronous
-store surface is converted to asynchronous database calls. Do not deploy the
-panel and Telegram channel to separate hosts until that conversion is complete:
-they must share this Neon database, not a local file.
+When `DATABASE_URL` is configured, the live bot, panel API, and tutor roster use
+the asynchronous Neon persistence boundary. `.data/between.json` remains only
+for local runs without database credentials and for existing unit tests.
