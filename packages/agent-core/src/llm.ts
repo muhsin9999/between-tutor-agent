@@ -24,9 +24,12 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { resolveModel } from "./model";
 import {
+  BRIEF_SCHEMA,
   PLAN_DAYS_SCHEMA,
+  assertBriefLegal,
   assertRevisionLegal,
   type Attempt,
+  type Brief,
   type Plan,
   type PlanDay,
 } from "./contracts";
@@ -198,4 +201,32 @@ export async function nextStep(args: {
       `Reply to him directly. If he was wrong, show the right answer once and move on — ` +
       `do not explain the whole rule, and do not ask him to try again now.`,
   });
+}
+
+/** T-B6 — model-selected composition over the fixed briefing vocabulary. */
+export async function composeBrief(args: {
+  student_id: string;
+  plan: Plan;
+  attempts: Attempt[];
+  quiet: boolean;
+}): Promise<Brief> {
+  const out = await object({
+    schema: BRIEF_SCHEMA,
+    system: `You write a tutor's five-minute pre-lesson briefing. ${HOUSE_RULES}
+
+The UI vocabulary is closed. You compose typed data only; you never write JSX or
+invent a component. PlanLane is always last. Use between two and five components.
+Every ErrorGrid.gave and Breakthrough.sentence must quote a stored student answer
+verbatim. If this is a quiet week, return ONLY QuietCard and PlanLane: no grid,
+no streak, no invented evidence.`,
+    prompt: `Student: ${args.student_id}
+Current plan v${args.plan.version}: ${JSON.stringify(args.plan.days)}
+Attempts: ${JSON.stringify(args.attempts.map((attempt) => ({ day: attempt.day, gave: attempt.gave, correct: attempt.correct, error_tag: attempt.error_tag })))}
+Quiet week: ${args.quiet}
+
+Choose the smallest useful briefing. The headline must tell the tutor something
+she cannot infer merely by reading component labels.`,
+  });
+  assertBriefLegal(out);
+  return out;
 }

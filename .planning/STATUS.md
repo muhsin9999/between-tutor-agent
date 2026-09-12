@@ -49,10 +49,10 @@ say it out loud. Never reach across.
 | T-B0 | `llm.ts` on the AI SDK (`generateObject`) | B | ✅ |
 | T-B1 | `store.ts` | B | ✅ | 
 | T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
-| T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ⬜ |
-| T-B4 | `evidence.ts` triggers + grading order | B | ⬜ |
-| T-B5 | **`revisePlan()`** — never cut | B | 🟨 written + legality-checked, not called live |
-| T-B6 | `composeBrief()` | B | ⬜ |
+| T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ✅ | `GET /api/tick?now=` reports due steps; `POST` resets a rehearsal while keeping enrolment |
+| T-B4 | `evidence.ts` triggers + grading order | B | ✅ | normalised exact match first; repeat-error trigger is deterministic and tested |
+| T-B5 | **`revisePlan()`** — never cut | B | 🟨 | `recordStudentTurn()` now invokes and appends it; needs one real Channel turn |
+| T-B6 | `composeBrief()` | B | 🟨 | closed-vocabulary composition and grounding checks are in; needs one live completion |
 | INT | Panel on real data, week run twice | both | ⬜ |
 | REC | **Backup take recorded** | both | ⬜ |
 
@@ -70,6 +70,8 @@ say it out loud. Never reach across.
 |---|---|---|---|
 | B | A | `apps/channel/package.json` test script quotes its glob in **single** quotes — cmd doesn't strip them, so node matches nothing and reports success having run zero tests. Change to double quotes. I fixed the identical bug in agent-core; leaving yours alone per file ownership. | ⬜ |
 | B | A | `agent-core/contracts` is live: `PlanDay`, `Plan`, `Attempt`, `ERROR_TAGS`, `BriefComponent`. `agent-core` also exports `store.*` — use `store.claimUpdate(update_id)` for dedupe (T-A3) and `store.dueStep(student_id)` for the student turn (T-A5). Don't write your own. | ⬜ |
+| B | A | `recordStudentTurn({ student_id, day, gave })` is now the student-answer entry point. It records the raw attempt, grades deterministically, and appends v2 when the same closed error tag occurs twice. Call it from T-A5; do not duplicate revision logic. | ⬜ |
+| B | A | For `GET /api/brief?student_id=`, call `getBrief(student_id)` from `agent-core`. It returns only a validated, grounded tree; do not construct briefing components in the route. | ⬜ |
 
 ## Cuts taken
 
