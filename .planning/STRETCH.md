@@ -24,7 +24,13 @@ and it is the cheapest thing on the list to close.
 
 ---
 
-## A · Mcjethro — the tutor's dashboard · 25 min
+## A · Mcjethro — the roster view · 25 min
+
+> This is the **prototype** of the standalone web app's main screen, not the web
+> app itself. The real one — own login, own database, editing and history — is
+> specced in [DASHBOARD.md](DASHBOARD.md) and is a 2–4 hour build. The roster
+> logic written here moves across unchanged, so this is a down payment, not a
+> detour.
 
 **Files:** `apps/web/src/app/tutor/**` — new route, no overlap with B.
 
