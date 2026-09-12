@@ -33,7 +33,7 @@ export default function TutorDashboard() {
   return (
     <main style={shell}>
       <header style={{ marginBottom: 30 }}>
-        <p style={eyebrow}>Between &middot; your students</p>
+        <p style={eyebrow}>Week of practice</p>
         <h1 style={h1}>
           {rows.length === 0
             ? "No students yet"
@@ -95,9 +95,7 @@ const SANS =
 const shell: React.CSSProperties = {
   maxWidth: 680,
   margin: "0 auto",
-  padding: "34px 20px 72px",
-  background: "#FBF5E6",
-  minHeight: "100vh",
+  padding: "22px 20px 72px",
   fontFamily: SANS,
   color: "#1f2430",
 };
