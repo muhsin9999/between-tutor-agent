@@ -103,3 +103,27 @@ test("reset gives a clean take", () => {
   store.reset();
   assert.deepEqual(store.read().plans, []);
 });
+
+test("resetDemo keeps enrolment but clears rehearsal state", () => {
+  store.upsertStudent({ id: "jonas", name: "Jonas", chat_id: 123 });
+  store.setTutorChat(456);
+  store.addPlan(plan(1));
+  store.addAttempt({
+    student_id: "jonas",
+    plan_version: 1,
+    day: 1,
+    answered_at: new Date().toISOString(),
+    gave: "ging",
+    correct: true,
+    error_tag: null,
+  });
+  store.claimUpdate(9);
+
+  store.resetDemo();
+
+  assert.equal(store.read().students.jonas?.chat_id, 123);
+  assert.equal(store.read().tutor.chat_id, 456);
+  assert.deepEqual(store.read().plans, []);
+  assert.deepEqual(store.read().attempts, []);
+  assert.deepEqual(store.read().seen_updates, []);
+});
