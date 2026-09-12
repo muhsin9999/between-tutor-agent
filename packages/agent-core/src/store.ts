@@ -175,6 +175,23 @@ export function startClock(
  * takes. This deliberately also clears seen update ids, otherwise replaying a
  * scripted Telegram take would be ignored as a duplicate.
  */
+/**
+ * Start a fresh week for ONE student: drop their plans and answers, keep
+ * everyone else's and keep the enrolment.
+ *
+ * A tutor sends a line at the end of every lesson, so the second line about the
+ * same student is the normal case, not an edge case. `planWeek` always returns
+ * version 1 and `plans` is keyed on (student_id, version), so without this the
+ * second line hit a duplicate key, the insert threw, and her turn died in
+ * silence — she typed her line and nothing whatsoever came back.
+ */
+export function startWeek(student_id: string): void {
+  update((s) => {
+    s.plans = s.plans.filter((p) => p.student_id !== student_id);
+    s.attempts = s.attempts.filter((a) => a.student_id !== student_id);
+  });
+}
+
 export function resetDemo(): void {
   update((s) => {
     s.plans = [];

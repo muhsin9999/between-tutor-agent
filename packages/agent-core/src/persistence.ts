@@ -83,6 +83,14 @@ export async function dueStep(student_id: string, now = new Date()) {
   const answered = new Set(state.attempts.filter((a) => a.student_id === student_id).map((a) => a.day));
   return plan.days.find((d) => d.day <= day && !answered.has(d.day)) ?? null;
 }
+/** See `store.startWeek`. Attempts first: they reference the plan version. */
+export async function startWeek(student_id: string): Promise<void> {
+  if (!hasNeonDatabase()) return json.startWeek(student_id);
+  const sql = neonSql();
+  await sql`DELETE FROM attempts WHERE student_id = ${student_id}`;
+  await sql`DELETE FROM plans WHERE student_id = ${student_id}`;
+}
+
 export async function resetDemo(): Promise<void> {
   if (!hasNeonDatabase()) return json.resetDemo();
   const sql = neonSql(); await sql`DELETE FROM attempts`; await sql`DELETE FROM plans`; await sql`DELETE FROM telegram_updates`; await sql`DELETE FROM demo_clocks`;

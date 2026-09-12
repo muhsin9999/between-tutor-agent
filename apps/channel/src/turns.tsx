@@ -61,6 +61,15 @@ export async function handleTutorLine(
   }
 
   const plan = await planWeek({ student_id: studentId, tutor_line: line });
+  /*
+   * A line at the end of every lesson is the product, so the SECOND line about
+   * the same student is the normal case. planWeek always returns version 1 and
+   * plans is keyed on (student_id, version), so inserting on top of last week
+   * threw a duplicate key and the tutor's turn died silently — she typed and
+   * nothing came back at all. A new line is a new week: last week's plan and
+   * answers go, and the clock restarts.
+   */
+  await store.startWeek(studentId);
   await store.addPlan(plan);
   await store.startClock();
 
