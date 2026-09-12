@@ -11,7 +11,8 @@
   "workspaces": [
     "packages/*",
     "apps/channel",
-    "apps/web"
+    "apps/web",
+    "apps/dashboard"
   ],
   "scripts": {
     "dev": "npm run dev:web",
@@ -24,7 +25,8 @@
     "rehearse:quiet": "node --env-file-if-exists=.env --import tsx scripts/rehearse-quiet.ts",
     "seed:quiet": "node --import tsx scripts/seed-quiet.ts",
     "test": "npm run test --workspaces --if-present",
-    "verify": "npm run typecheck && npm test"
+    "verify": "npm run typecheck && npm test",
+    "dev:dashboard": "npm run dev --workspace dashboard"
   },
   "overrides": {
     "@ag-ui/client": "0.0.59"

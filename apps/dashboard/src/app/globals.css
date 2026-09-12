@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+ * Between — dashboard design tokens.
+ *
+ * Dark-first. The panel a tutor opens on her phone is warm cream; this is the
+ * desk surface she works at, and it holds more information at once, so it
+ * carries less light and more contrast.
+ *
+ * Amber is identity. Semantic colour (quiet / stuck / ahead) is separate from
+ * it and never doubles as accent.
+ */
+@theme {
+  --color-ink-900: #070E20;
+  --color-ink-850: #0B1733;
+  --color-ink-800: #101F42;
+  --color-ink-700: #172B57;
+  --color-ink-600: #223A6E;
+  --color-line:    #1E3059;
+
+  --color-cream:      #F4EFE2;
+  --color-cream-dim:  #A9B4CE;
+  --color-cream-faint:#6F7C9C;
+
+  --color-amber:      #F5A623;
+  --color-amber-soft: #F8C16B;
+
+  --color-quiet:    #E5484D;
+  --color-stuck:    #F5A623;
+  --color-ahead:    #3DD68C;
+  --color-ontrack:  #7C88A6;
+
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", Georgia, serif;
+
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root { color-scheme: dark; }
+
+html, body {
+  background: var(--color-ink-900);
+  color: var(--color-cream);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+::selection { background: var(--color-amber); color: #0B1733; }
+
+/* Focus: visible, on-brand, never the browser default ring. */
+:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Entry stagger. Decorative only — never blocks interaction. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 320ms var(--ease-out-strong) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
