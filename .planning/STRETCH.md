@@ -98,6 +98,7 @@ Put these in the writeup as next steps. They earn credit there and cost nothing.
 | **Drag to reorder next week** | A `sendData()` round trip plus a write-back path. ~30 min, and the loop already closes without it. |
 | **Tutor-set pacing** | A contract change: `PlanDay`, `Attempt`, `dueStep`, `detectEvidence` and `composeBrief` all move. Changing the frozen contract with 35 minutes left is how a working demo stops working. |
 | **Classes** | Eighteen synthetic weeks of fixtures before anything renders. It makes the idea better and it is the strongest thing to put in "what's next". |
+| **Better Auth accounts** | Needs a database, and the store is still a JSON file — so it lands after the Neon migration, not before. Planned in [AUTH.md](AUTH.md). The tutor's panel is already authenticated cryptographically by Telegram's signed `initData`; what is missing is a browser door for a tutor who is not in Telegram. |
 | **Hosting it off the laptop** | The Channels runtime needs a long-running process, so it is a three-piece migration (Vercel + a container host + a hosted store), not a deploy button. Planned in [HOSTING.md](HOSTING.md); 45–60 minutes, and none of them are the 35 we have. |
 
 ---
