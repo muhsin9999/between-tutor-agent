@@ -10,7 +10,7 @@
  * `evidence.ts`. A list does not need a model, and a model here would add three
  * seconds and nothing else.
  */
-import { store } from "agent-core";
+import { persistence as store } from "agent-core";
 import type { Attempt, Plan } from "agent-core/contracts";
 
 /** Ordered by urgency. The array order IS the sort order — see `compareNeed`. */
@@ -95,14 +95,14 @@ export function compareNeed(a: RosterRow, b: RosterRow): number {
   return a.lastSeenDay - b.lastSeenDay;
 }
 
-export function roster(now: Date = new Date()): RosterRow[] {
-  const state = store.read();
-  const day = store.currentDay(now);
+export async function roster(now: Date = new Date()): Promise<RosterRow[]> {
+  const state = await store.read();
+  const day = store.currentDay(now, state);
 
-  const rows = Object.values(state.students).map((student): RosterRow => {
-    const plan = store.latestPlan(student.id);
-    const attempts = store.attemptsFor(student.id);
-    const versions = store.planHistory(student.id).map((p) => p.version);
+  const rows = await Promise.all(Object.values(state.students).map(async (student): Promise<RosterRow> => {
+    const plan = await store.latestPlan(student.id);
+    const attempts = await store.attemptsFor(student.id);
+    const versions = (await store.planHistory(student.id)).map((p) => p.version);
     const { need, because } = assess(plan, attempts, day);
 
     return {
@@ -117,7 +117,7 @@ export function roster(now: Date = new Date()): RosterRow[] {
       versions,
       revisedThisWeek: versions.length > 1,
     };
-  });
+  }));
 
   return rows.sort(compareNeed);
 }

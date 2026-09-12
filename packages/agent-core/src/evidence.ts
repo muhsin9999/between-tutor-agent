@@ -5,8 +5,10 @@ import {
   type Plan,
   type PlanDay,
 } from "./contracts";
+// Both sides of the merge: classifyError is the per-plan error taxonomy,
+// persistence is the Neon-or-JSON boundary.
 import { classifyError, revisePlan } from "./llm";
-import * as store from "./store";
+import * as store from "./persistence";
 
 /**
  * Exact comparison is deliberately boring: it is the camera-safe happy path.
@@ -173,7 +175,7 @@ export async function recordStudentTurn(args: {
   revise?: Reviser;
   classify?: Classifier;
 }): Promise<{ attempt: Attempt; trigger: EvidenceTrigger | null; revised_plan: Plan | null }> {
-  const plan = store.latestPlan(args.student_id);
+  const plan = await store.latestPlan(args.student_id);
   if (!plan) throw new Error(`No plan exists for ${args.student_id}.`);
   const step = plan.days.find((candidate) => candidate.day === args.day);
   if (!step) throw new Error(`Plan v${plan.version} has no day ${args.day}.`);
@@ -190,21 +192,21 @@ export async function recordStudentTurn(args: {
     // right one or on a miss the heuristics already recognise.
     error_tag: correct ? null : await errorTagFor(step, args.gave, plan, args.classify),
   };
-  store.addAttempt(attempt);
+  await store.addAttempt(attempt);
 
   const trigger = detectEvidence({
     plan,
-    attempts: store.attemptsFor(args.student_id),
-    dueDay: Math.max(args.day, store.currentDay(args.now ?? new Date())),
+    attempts: await store.attemptsFor(args.student_id),
+    dueDay: Math.max(args.day, store.currentDay(args.now ?? new Date(), await store.read())),
   });
   if (trigger?.kind !== "same-error-twice") return { attempt, trigger, revised_plan: null };
 
   const revised = await (args.revise ?? revisePlan)({
     plan,
-    attempts: store.attemptsFor(args.student_id),
+    attempts: await store.attemptsFor(args.student_id),
     today: args.day,
     trigger: `Two ${trigger.error_tag} errors; replace the next drill with a short explanation.`,
   });
-  store.addPlan(revised);
+  await store.addPlan(revised);
   return { attempt, trigger, revised_plan: revised };
 }

@@ -43,7 +43,14 @@ process.once("SIGTERM", shutdown);
 
 const listener = createCopilotNodeListener({ runtime, basePath: "/api/copilotkit" });
 const channels = listener.channels;
-const server = createServer(listener);
+const server = createServer((request, response) => {
+  if (request.url === "/health") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  listener(request, response);
+});
 
 teardown = async () => {
   await channels.stop();

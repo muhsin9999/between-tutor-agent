@@ -8,24 +8,16 @@
  * talking, what to say back, and how it looks in Telegram.
  */
 import { Message, Section, Markdown, Context } from "@copilotkit/channels";
-import { planWeek, nextStep, recordStudentTurn, store } from "agent-core";
-import type { PlanDay } from "agent-core/contracts";
 import { explainMiss, shouldExplain } from "./explain";
 import { downloadVoice, VOICE_FILENAME, type VoiceNote } from "./voice";
-// Reached by path, not by barrel: agent-core's `exports` map publishes ".",
-// "./shared" and "./contracts" only, and transcribe.ts is behind none of them.
-// Adding an entry would mean editing agent-core, which is somebody else's file
-// right now. The module is pure — bytes in, a string out — so a second
-// specifier for it costs nothing.
 import {
   normalizeSpeech,
   transcribeVoice,
   uploadFilename,
   vocabularyHint,
 } from "../../../packages/agent-core/src/transcribe";
-
-/** The demo runs one student. Fixtures name him; see .planning/FIXTURES.md. */
-export const STUDENT_ID = "jonas";
+import { planWeek, nextStep, recordStudentTurn, persistence as store } from "agent-core";
+import type { PlanDay } from "agent-core/contracts";
 
 type Thread = {
   conversationKey: string;
@@ -49,7 +41,11 @@ export function chatIdFrom(conversationKey: string): number {
  * all week, so the reply is TWO LINES — a confirmation, not the plan. Printing
  * six days back at her would undo the entire pitch.
  */
-export async function handleTutorLine(thread: Thread, line: string): Promise<void> {
+export async function handleTutorLine(
+  thread: Thread,
+  studentId: string,
+  line: string,
+): Promise<void> {
   if (line.length < 12) {
     await thread.post(
       <Message accent="#16306B">
@@ -64,9 +60,9 @@ export async function handleTutorLine(thread: Thread, line: string): Promise<voi
     return;
   }
 
-  const plan = await planWeek({ student_id: STUDENT_ID, tutor_line: line });
-  store.addPlan(plan);
-  store.startClock();
+  const plan = await planWeek({ student_id: studentId, tutor_line: line });
+  await store.addPlan(plan);
+  await store.startClock();
 
   await thread.post(
     <Message accent="#16306B">
@@ -151,11 +147,11 @@ function serialize(key: string, work: () => Promise<void>): Promise<void> {
  * and drop the repeat. Falls open when the adapter gives us no id — dropping
  * real answers would be far worse than an occasional double.
  */
-function isDuplicate(message: unknown): boolean {
+async function isDuplicate(message: unknown): Promise<boolean> {
   const id = (message as { id?: string | number } | null)?.id;
   if (id === undefined || id === null) return false;
   const numeric = typeof id === "number" ? id : hash(String(id));
-  return !store.claimUpdate(numeric);
+  return !(await store.claimUpdate(numeric));
 }
 
 function hash(value: string): number {
@@ -164,29 +160,22 @@ function hash(value: string): number {
   return Math.abs(h);
 }
 
-/**
- * `heard` is the transcript of a spoken answer, and is set ONLY by the voice
- * path. It changes nothing about grading — `text` is already the transcript by
- * the time it arrives here — it is echoed back in the reply so a mis-heard
- * answer is a visible one. A typed turn passes it undefined and is byte-for-byte
- * the turn it always was.
- */
 export async function handleStudentAnswer(
   thread: Thread,
+  studentId: string,
   text: string,
   message?: unknown,
-  heard?: string,
 ): Promise<void> {
-  if (message !== undefined && isDuplicate(message)) return;
-  return serialize(STUDENT_ID, () => studentTurn(thread, text, heard));
+  if (message !== undefined && await isDuplicate(message)) return;
+  return serialize(studentId, () => studentTurn(thread, studentId, text));
 }
 
-async function studentTurn(thread: Thread, text: string, heard?: string): Promise<void> {
-  const plan = store.latestPlan(STUDENT_ID);
-  const step = store.dueStep(STUDENT_ID);
+async function studentTurn(thread: Thread, studentId: string, text: string): Promise<void> {
+  const plan = await store.latestPlan(studentId);
+  const step = await store.dueStep(studentId);
 
   if (!step || !plan) {
-    outstanding.delete(STUDENT_ID);
+    outstanding.delete(studentId);
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -201,33 +190,31 @@ async function studentTurn(thread: Thread, text: string, heard?: string): Promis
     return;
   }
 
-  const pending = outstanding.get(STUDENT_ID);
+  const pending = outstanding.get(studentId);
 
   // Grade ONLY a reply to the exact question we asked, from the plan version we
   // asked it under. Anything else — first contact, a revised plan, a message
   // that arrived while the week moved — gets asked, not scored.
   if (!pending || pending.day !== step.day || pending.version !== plan.version) {
-    outstanding.set(STUDENT_ID, { version: plan.version, day: step.day });
+    outstanding.set(studentId, { version: plan.version, day: step.day });
     await thread.post(ask(step));
     return;
   }
 
   // Claim the question before any await. A second message cannot now be graded
   // against the same day even if it slips past the queue.
-  outstanding.delete(STUDENT_ID);
+  outstanding.delete(studentId);
 
-  const answeredBefore = store.attemptsFor(STUDENT_ID);
+  const answeredBefore = await store.attemptsFor(studentId);
 
   const { attempt, trigger, revised_plan } = await recordStudentTurn({
-    student_id: STUDENT_ID,
+    student_id: studentId,
     day: step.day,
     gave: text,
   });
 
-  const streak = store
-    .attemptsFor(STUDENT_ID)
-    .reverse()
-    .findIndex((a) => !a.correct);
+  const recentAttempts = await store.attemptsFor(studentId);
+  const streak = recentAttempts.reverse().findIndex((attempt) => !attempt.correct);
 
   const { reply } = await nextStep({
     step,
@@ -239,32 +226,21 @@ async function studentTurn(thread: Thread, text: string, heard?: string): Promis
   await thread.post(
     <Message accent={attempt.correct ? "#2E7D4F" : "#F5A623"}>
       <Section>
-        <Markdown>{heard ? `Heard: \`${heard}\`\n\n${reply}` : reply}</Markdown>
+        <Markdown>{reply}</Markdown>
       </Section>
     </Message>,
   );
 
-  // T-A6 · WHY, in the chat — but only AFTER the reply has landed.
-  //
-  // On a phone the order is the whole design: the short human sentence he
-  // answers, then the grid that explains it, then the revision, then the next
-  // question. A table arriving first turns a warm correction into a mark sheet,
-  // and he reads the grid before he reads the answer.
-  //
-  // `shouldExplain` is the gate, not this call: it fires on two misses carrying
-  // one tag inside one plan version — the same threshold evidence.ts revises
-  // on — so the table and the revision land as one event. Everything is wrapped
-  // because an explanation is a nicety and his turn is not: a throw in here must
-  // never cost him the reply he already has, or the next question below.
+  // Order on a phone: reply -> table -> revision line -> next question. He sees
+  // the short human answer before a grid. Fails soft: a broken explanation must
+  // never take down a turn.
   try {
-    const attempts = store.attemptsFor(STUDENT_ID);
-    if (shouldExplain(attempts, step)) {
-      await thread.post(explainMiss({ step, gave: attempt.gave, attempts }));
+    const soFar = await store.attemptsFor(studentId);
+    if (shouldExplain(soFar, step)) {
+      await thread.post(explainMiss({ step, gave: attempt.gave, attempts: soFar }));
     }
-  } catch (error) {
-    console.warn(
-      `[explain] skipped for day ${step.day}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  } catch (cause) {
+    console.warn(`[explain] skipped for day ${step.day}:`, cause);
   }
 
   // The revision is the beat the whole demo turns on, so it is visible to the
@@ -285,89 +261,57 @@ async function studentTurn(thread: Thread, text: string, heard?: string): Promis
 
   // Ask the next thing, if anything is due. One question at a time, and pinned
   // to whichever plan version is current AFTER any revision.
-  const current = store.latestPlan(STUDENT_ID);
-  const next = store.dueStep(STUDENT_ID);
+  const current = await store.latestPlan(studentId);
+  const next = await store.dueStep(studentId);
   if (next && current && next.day !== step.day) {
-    outstanding.set(STUDENT_ID, { version: current.version, day: next.day });
+    outstanding.set(studentId, { version: current.version, day: next.day });
     await thread.post(ask(next));
   }
 }
 
-/* ── T-A5 · the same turn, spoken ────────────────────────────────────────── */
 
-/**
- * The vocabulary hint, built from the WEEK — every target item in the current
- * plan, not today's `expects`.
+/* ── voice ────────────────────────────────────────────────────────────────
  *
- * Measured in transcribe.ts and the reason this helper exists at all: without a
- * hint, one-word German answers mostly come back wrong ("ging" → "Ding"). With
- * only today's answer in the hint you fix that by biasing the decoder toward
- * the one string that scores a point, which manufactures correct grades. All six
- * verbs together still resolved to the one actually spoken, and never turned a
- * wrong answer into the right one — so the whole set goes in, or nothing does.
- */
-function weekHint(): string | undefined {
-  const plan = store.latestPlan(STUDENT_ID);
-  if (!plan) return undefined;
-  return vocabularyHint(plan.days.flatMap((day) => day.target_items));
-}
+ * A transcript walks through the SAME door a typed message does, so it meets
+ * isDuplicate, serialize and the outstanding version+day pin unchanged. There
+ * is no second grading path.
+ * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * A spoken answer, on its way to becoming a typed one.
- *
- * Everything here is about getting a STRING. The moment there is one it goes
- * through `handleStudentAnswer` — the same door a typed message walks through,
- * so it meets the same duplicate claim, the same per-student queue and the same
- * outstanding-question pin. There is no second grading path and there must
- * never be one.
- *
- * The other half of the contract is the failure case. Download, transcription
- * and normalisation each return `null` rather than throwing, and a `null` is
- * answered with one line asking him to type it — never with a grade. Nothing
- * below `null` reaches `recordStudentTurn`, so a failed transcription cannot
- * become an attempt, cannot tag an error and cannot revise his week. The
- * outstanding question is left pinned exactly where it was, so typing the
- * answer afterwards still scores against the day he was asked.
- */
 export async function handleStudentVoice(
   thread: Thread,
+  studentId: string,
   note: VoiceNote,
   message?: unknown,
 ): Promise<void> {
-  let transcript: string | null = null;
-
   try {
     const audio = await downloadVoice(note.fileId, process.env.TELEGRAM_BOT_TOKEN ?? "");
-    if (audio) {
-      // `.oga` is what Telegram serves and what two of the three transcription
-      // models reject by extension. `uploadFilename` renames it to `.ogg` — a
-      // string edit, not a transcode; the bytes are untouched.
-      const spoken = await transcribeVoice(audio, uploadFilename(VOICE_FILENAME), {
-        prompt: weekHint(),
-      });
-      // transcribeVoice already normalises; doing it here too is idempotent and
-      // keeps the guarantee local rather than borrowed.
-      transcript = spoken ? normalizeSpeech(spoken) || null : null;
-    }
-  } catch (error) {
-    // Belt and braces. Both halves promise to fail soft, and a promise is not a
-    // guarantee when a student's turn is what it costs.
-    console.warn(
-      `[voice] turn fell back to typing: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    transcript = null;
-  }
+    if (!audio) return askHimToType(thread);
 
-  if (!transcript) {
-    await thread.post(
-      <Message accent="#F5A623">
-        <Section>
-          <Markdown>{"I couldn't make that one out — could you type it instead?"}</Markdown>
-        </Section>
-      </Message>,
-    );
-    return;
-  }
+    // The hint is the WHOLE week's target items, not today's expects: without
+    // it, bare one-word German answers transcribe wrong ("ging" -> "Ding").
+    const plan = await store.latestPlan(studentId);
+    const hint = vocabularyHint(plan?.days.flatMap((day) => day.target_items) ?? []);
 
-  await handleStudentAnswer(thread, transcript, message, transcript);
+    // .oga must be renamed .ogg — OpenAI validates by extension and 400s on oga.
+    const heard = await transcribeVoice(audio, uploadFilename(VOICE_FILENAME), { prompt: hint });
+    if (!heard) return askHimToType(thread);
+
+    // A failed transcription writes NO attempt and does not claim the message
+    // id, so a re-delivery can retry and typing the answer still grades against
+    // the day he was actually asked. A bad voice note costs him nothing.
+    await handleStudentAnswer(thread, studentId, normalizeSpeech(heard), message);
+  } catch (cause) {
+    console.warn("[voice] turn fell back to typing:", cause);
+    await askHimToType(thread);
+  }
+}
+
+async function askHimToType(thread: Thread): Promise<void> {
+  await thread.post(
+    <Message accent="#F5A623">
+      <Section>
+        <Markdown>{"I couldn't make that one out — could you type it instead?"}</Markdown>
+      </Section>
+    </Message>,
+  );
 }

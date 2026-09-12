@@ -26,8 +26,8 @@ const STATE: Record<Need, { label: string; fg: string; bg: string }> = {
   "not-started": { label: "Not started", fg: "#6B6F7E", bg: "#EDEAE1" },
 };
 
-export default function TutorDashboard() {
-  const rows = roster();
+export default async function TutorDashboard() {
+  const rows = await roster();
   const needing = rows.filter((r) => r.need === "quiet" || r.need === "stuck").length;
 
   return (
