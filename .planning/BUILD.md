@@ -26,6 +26,10 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 | **[CUTS.md](CUTS.md)** | What to drop, at what time, in what order | 14:20 and whenever you're behind |
 | **[SHIP.md](SHIP.md)** | Video shot list, writeup, social post, submission | 15:05 |
 | **[STATUS.md](STATUS.md)** | Live board. Both of you edit it. | Every 20 minutes |
+| **[STRETCH.md](STRETCH.md)** | What to add in the last 35 minutes, and what not to | 14:30 |
+| **[SURFACES.md](SURFACES.md)** | Who else this product has to meet — the parent gap first | After the deadline |
+| **[AUTH.md](AUTH.md)** | Better Auth on the browser door; Telegram keeps its own | After the deadline |
+| **[HOSTING.md](HOSTING.md)** | Getting off the laptop: Vercel + a container host + Neon | After the deadline |
 
 ## Timeline
 
