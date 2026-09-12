@@ -26,7 +26,13 @@ import {
 import { telegram } from "@copilotkit/channels/telegram";
 import { persistence as store } from "agent-core";
 import { makeChannelAgent } from "./agent";
-import { chatIdFrom, handleStudentAnswer, handleTutorLine } from "./turns";
+import {
+  chatIdFrom,
+  handleStudentAnswer,
+  handleStudentVoice,
+  handleTutorLine,
+} from "./turns";
+import { extractVoice } from "./voice";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
@@ -218,12 +224,24 @@ channel.onWelcome(async ({ thread }) => {
  * Everyone after her is the student.
  */
 channel.onMessage(async ({ thread, message }) => {
-  const text = (message.text ?? "").trim();
-  if (!text) return;
-
   const chatId = chatIdFrom(thread.conversationKey);
   const state = await store.read();
   const tutorChat = state.tutor.chat_id;
+
+  // A voice note carries no `message.text`, so this MUST run before the empty
+  // guard below — that line was silently eating every spoken answer. Students
+  // only; a voice note from the tutor is still dropped.
+  const note = extractVoice(message);
+  if (note) {
+    const speaking = await store.studentByChat(chatId);
+    if (speaking) {
+      await handleStudentVoice(thread as never, speaking.id, note, message);
+      return;
+    }
+  }
+
+  const text = (message.text ?? "").trim();
+  if (!text) return;
 
   const pending = pendingEnrollments.get(chatId);
   if (pending) {

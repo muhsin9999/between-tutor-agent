@@ -8,6 +8,14 @@
  * talking, what to say back, and how it looks in Telegram.
  */
 import { Message, Section, Markdown, Context } from "@copilotkit/channels";
+import { explainMiss, shouldExplain } from "./explain";
+import { downloadVoice, VOICE_FILENAME, type VoiceNote } from "./voice";
+import {
+  normalizeSpeech,
+  transcribeVoice,
+  uploadFilename,
+  vocabularyHint,
+} from "../../../packages/agent-core/src/transcribe";
 import { planWeek, nextStep, recordStudentTurn, persistence as store } from "agent-core";
 import type { PlanDay } from "agent-core/contracts";
 
@@ -223,6 +231,18 @@ async function studentTurn(thread: Thread, studentId: string, text: string): Pro
     </Message>,
   );
 
+  // Order on a phone: reply -> table -> revision line -> next question. He sees
+  // the short human answer before a grid. Fails soft: a broken explanation must
+  // never take down a turn.
+  try {
+    const soFar = await store.attemptsFor(studentId);
+    if (shouldExplain(soFar, step)) {
+      await thread.post(explainMiss({ step, gave: attempt.gave, attempts: soFar }));
+    }
+  } catch (cause) {
+    console.warn(`[explain] skipped for day ${step.day}:`, cause);
+  }
+
   // The revision is the beat the whole demo turns on, so it is visible to the
   // student in one quiet line rather than happening silently behind the panel.
   if (revised_plan) {
@@ -247,4 +267,51 @@ async function studentTurn(thread: Thread, studentId: string, text: string): Pro
     outstanding.set(studentId, { version: current.version, day: next.day });
     await thread.post(ask(next));
   }
+}
+
+
+/* ── voice ────────────────────────────────────────────────────────────────
+ *
+ * A transcript walks through the SAME door a typed message does, so it meets
+ * isDuplicate, serialize and the outstanding version+day pin unchanged. There
+ * is no second grading path.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export async function handleStudentVoice(
+  thread: Thread,
+  studentId: string,
+  note: VoiceNote,
+  message?: unknown,
+): Promise<void> {
+  try {
+    const audio = await downloadVoice(note.fileId, process.env.TELEGRAM_BOT_TOKEN ?? "");
+    if (!audio) return askHimToType(thread);
+
+    // The hint is the WHOLE week's target items, not today's expects: without
+    // it, bare one-word German answers transcribe wrong ("ging" -> "Ding").
+    const plan = await store.latestPlan(studentId);
+    const hint = vocabularyHint(plan?.days.flatMap((day) => day.target_items) ?? []);
+
+    // .oga must be renamed .ogg — OpenAI validates by extension and 400s on oga.
+    const heard = await transcribeVoice(audio, uploadFilename(VOICE_FILENAME), { prompt: hint });
+    if (!heard) return askHimToType(thread);
+
+    // A failed transcription writes NO attempt and does not claim the message
+    // id, so a re-delivery can retry and typing the answer still grades against
+    // the day he was actually asked. A bad voice note costs him nothing.
+    await handleStudentAnswer(thread, studentId, normalizeSpeech(heard), message);
+  } catch (cause) {
+    console.warn("[voice] turn fell back to typing:", cause);
+    await askHimToType(thread);
+  }
+}
+
+async function askHimToType(thread: Thread): Promise<void> {
+  await thread.post(
+    <Message accent="#F5A623">
+      <Section>
+        <Markdown>{"I couldn't make that one out — could you type it instead?"}</Markdown>
+      </Section>
+    </Message>,
+  );
 }

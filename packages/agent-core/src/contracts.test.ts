@@ -2,9 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BRIEF_SCHEMA,
+  DEFAULT_ERROR_TAGS,
   PLAN_SCHEMA,
   assertBriefLegal,
   assertRevisionLegal,
+  errorTagsOf,
+  normalizeErrorTags,
   type Plan,
 } from "./contracts";
 
@@ -92,4 +95,39 @@ test("a revision cannot introduce material the tutor did not set", () => {
 
 test("a revision within the original target set is legal", () => {
   assert.doesNotThrow(() => assertRevisionLegal(plan, { days: days(["sehen"]) }));
+});
+
+/* ── the error vocabulary belongs to the plan ─────────────────────────────── */
+
+test("a plan carries its own subject-shaped error tags", () => {
+  const maths = { ...plan, error_tags: ["sign-error", "factorising", "order-of-operations"] };
+  assert.doesNotThrow(() => PLAN_SCHEMA.parse(maths));
+  assert.deepEqual(errorTagsOf(maths), maths.error_tags);
+});
+
+// `untagged` is what `detectEvidence` SKIPS. A plan that listed it as one of its
+// own categories would be collecting misses into a bucket the trigger ignores.
+test("'untagged' is reserved and cannot be one of a plan's error tags", () => {
+  assert.throws(() => PLAN_SCHEMA.parse({ ...plan, error_tags: ["sign-error", "untagged", "factorising"] }));
+  assert.deepEqual(normalizeErrorTags(["sign-error", "untagged", "factorising"]), ["sign-error", "factorising"]);
+});
+
+test("a model's tag list is cleaned rather than trusted", () => {
+  assert.deepEqual(
+    normalizeErrorTags(["Sign Error", "sign_error", "  Factorising  ", "order of operations"]),
+    ["sign-error", "factorising", "order-of-operations"],
+  );
+  // Too few usable tags is worth less than the fallback, and never a crash on
+  // the one line the tutor types all week.
+  assert.deepEqual(normalizeErrorTags(["untagged"]), [...DEFAULT_ERROR_TAGS]);
+  assert.deepEqual(normalizeErrorTags(undefined), [...DEFAULT_ERROR_TAGS]);
+});
+
+// There is live demo data in .data/between.json written before this field existed.
+test("a plan stored without error_tags falls back instead of crashing", () => {
+  assert.deepEqual(plan.error_tags, undefined);
+  assert.doesNotThrow(() => PLAN_SCHEMA.parse(plan));
+  assert.deepEqual(errorTagsOf(plan), [...DEFAULT_ERROR_TAGS]);
+  assert.deepEqual(errorTagsOf(undefined), [...DEFAULT_ERROR_TAGS]);
+  assert.equal(errorTagsOf(plan).includes("untagged"), false);
 });

@@ -12,7 +12,7 @@
  */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
 import type { Brief } from "agent-core/contracts";
 import { BriefRenderer } from "../../components/between";
@@ -39,35 +39,70 @@ supports?: unknown;
   }
 }
 
+/**
+ * The panel asks for one student, and the reorder writes back against the same
+ * one. `/api/brief` does not return the id it resolved — only the display name —
+ * so the constant the page requests with is the constant the write uses. One
+ * value, one place: if the panel ever learns to pick a student, both move.
+ */
+const STUDENT_ID = "jonas";
+
 export default function PanelPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initData, setInitData] = useState<string>("");
+
+  /**
+   * One fetch, used twice: on open, and again after a reorder lands.
+   *
+   * `quiet` is the difference. On open, a failure is the whole screen — there is
+   * nothing else to show. After a save, the week on screen is already the week
+   * the server stored (the lane swapped to the server's own response), so a
+   * failed refresh must not replace a correct panel with an error page.
+   */
+  const load = useCallback(async (signed: string, quiet = false) => {
+    // In Telegram: POST the signed initData. In a desktop browser while
+    // building: fall back to the dev GET, which is refused in production.
+    try {
+      const res = signed
+        ? await fetch("/api/brief", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ initData: signed, student_id: STUDENT_ID }),
+          })
+        : await fetch(`/api/brief?student_id=${encodeURIComponent(STUDENT_ID)}`);
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setData(json as Payload);
+      setError(null);
+    } catch (cause) {
+      if (quiet) return;
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, []);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
     webApp?.ready();
     webApp?.expand();
 
-    const initData = webApp?.initData ?? "";
+    const signed = webApp?.initData ?? "";
+    setInitData(signed);
+    void load(signed);
+  }, [load]);
 
-    // In Telegram: POST the signed initData. In a desktop browser while
-    // building: fall back to the dev GET, which is refused in production.
-    const request = initData
-      ? fetch("/api/brief", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initData }),
-        })
-      : fetch("/api/brief?student_id=jonas");
-
-    request
-      .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-        setData(json as Payload);
-      })
-      .catch((e: Error) => setError(e.message));
-  }, []);
+  /**
+   * The save happened; make the panel say so.
+   *
+   * Re-reading the brief is the honest refresh: the reorder does not only bump
+   * the lane's version, it changes `plan_reason` and can change what
+   * `composeBrief` puts above the lane. Updating the lane's baseline alone would
+   * leave the rest of the screen describing the week before the drag.
+   */
+  const onPlanSaved = useCallback(() => {
+    void load(initData, true);
+  }, [initData, load]);
 
   if (error) {
     return (
@@ -96,7 +131,19 @@ export default function PanelPage() {
         </h1>
       </header>
 
-      <BriefRenderer brief={data.brief} planReason={data.plan_reason} showHeadline={false} />
+      <BriefRenderer
+        brief={data.brief}
+        planReason={data.plan_reason}
+        showHeadline={false}
+        // Editing is a Telegram surface. Without a signature there is nobody to
+        // attribute a version to, so a desktop browser during development gets
+        // the read-only lane — the same week, minus the one thing it cannot
+        // honestly offer.
+        editable={initData.length > 0}
+        studentId={STUDENT_ID}
+        initData={initData}
+        onPlanSaved={onPlanSaved}
+      />
     </main>
   );
 }

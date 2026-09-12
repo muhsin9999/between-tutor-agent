@@ -26,8 +26,11 @@ import { resolveModel } from "./model";
 import {
   BRIEF_SCHEMA,
   PLAN_DAYS_SCHEMA,
+  UNTAGGED,
   assertBriefLegal,
   assertRevisionLegal,
+  errorTagsOf,
+  normalizeErrorTags,
   type Attempt,
   type Brief,
   type Plan,
@@ -137,7 +140,15 @@ export async function planWeek(args: {
       `Plan the six days before the next lesson. Reuse one closed target_items set across the days. ` +
       `For the German irregular-past-tense demo, target_items MUST be exactly gehen, sehen, nehmen, sprechen, trinken, fahren—never add another verb. ` +
       `For "reason", write one sentence ` +
-      `describing the shape of the week and why it is in that order.`,
+      `describing the shape of the week and why it is in that order.\n\n` +
+      `For "error_tags": name 3-6 mistake types a student actually makes in THIS subject — ` +
+      `the categories you would group his wrong answers under when you look at a week of them. ` +
+      `Not topics, not skills: the shape of the mistake itself. ` +
+      `German verbs: strong-verb-vowel, wrong-auxiliary, wrong-ending, word-order. ` +
+      `Quadratic equations: sign-error, factorising, order-of-operations. ` +
+      `Piano: timing, fingering, dynamics. ` +
+      `lowercase-kebab-case, and never "${UNTAGGED}" — that one is reserved for a miss ` +
+      `none of yours fits.`,
   });
 
   return {
@@ -146,6 +157,9 @@ export async function planWeek(args: {
     reason: out.reason,
     created_at: new Date().toISOString(),
     days: constrainFixtureTargets(args.tutor_line, out.days),
+    // Cleaned rather than trusted — see normalizeErrorTags. This runs on the one
+    // line the tutor types all week, so it falls back instead of throwing.
+    error_tags: normalizeErrorTags(out.error_tags),
   };
 }
 
@@ -165,6 +179,9 @@ export async function revisePlan(args: {
 }): Promise<Plan> {
   const done = args.plan.days.filter((d) => d.day <= args.today);
   const remaining = args.plan.days.filter((d) => d.day > args.today);
+  // The week's vocabulary is fixed at v1. A revision that renamed it would make
+  // the two misses that caused it uncountable against the plan they now sit in.
+  const error_tags = errorTagsOf(args.plan);
 
   const out = await object({
     schema: PLAN_DAYS_SCHEMA,
@@ -175,6 +192,7 @@ You are REVISING a week already in progress.
 - Rewrite only days ${remaining.map((d) => d.day).join(", ") || "(none)"}.
 - You may NOT extend the week past day 6.
 - You may NOT introduce any target item outside: ${[...new Set(args.plan.days.flatMap((d) => d.target_items))].join(", ")}.
+- "error_tags" belongs to the week, not to you: return exactly ${error_tags.join(", ")}.
 - "reason" is ONE sentence a tutor would accept, naming what you saw and what you changed.`,
     prompt: `Trigger: ${args.trigger}\n\n` +
       `Plan v${args.plan.version}:\n${JSON.stringify(args.plan.days, null, 2)}\n\n` +
@@ -200,7 +218,52 @@ You are REVISING a week already in progress.
     reason: out.reason,
     created_at: new Date().toISOString(),
     days: out.days,
+    // Carried through in code, not taken from `out` — same reason the completed
+    // days are checked above rather than asked for nicely.
+    error_tags,
   };
+}
+
+/**
+ * The general path of `errorTagFor` — which of THIS plan's categories a miss
+ * belongs to. Constrained to the plan's own list plus `untagged`, so the model
+ * chooses between the tutor's categories and cannot invent a fifth one that
+ * would never repeat and so could never fire the trigger.
+ *
+ * Called only on a miss the deterministic heuristics could not place, never on a
+ * correct answer. One small structured call per unexplained wrong answer.
+ */
+export async function classifyError(args: {
+  step: PlanDay;
+  gave: string;
+  error_tags: string[];
+}): Promise<string> {
+  // z.enum needs a non-empty tuple; the destructure is how that is proved rather
+  // than asserted. `untagged` is always the last option and never a plan's own.
+  const [first = UNTAGGED, ...rest] = [
+    ...args.error_tags.filter((tag) => tag !== UNTAGGED),
+    UNTAGGED,
+  ];
+  const vocabulary: [string, ...string[]] = [first, ...rest];
+  const out = await object({
+    schema: z.object({
+      error_tag: z.enum(vocabulary).describe(`One of: ${vocabulary.join(", ")}. Nothing else.`),
+    }),
+    temperature: 0,
+    system:
+      `You are grouping one student's wrong answer under the mistake categories his own ` +
+      `tutor set for this week. You are not marking it — it is already wrong — and you are ` +
+      `not explaining it. You are filing it.\n\n` +
+      `Pick the category that names WHAT WENT WRONG, not what the question was about. If none ` +
+      `of them honestly fits, answer "${UNTAGGED}": a wrong category is worse than no category, ` +
+      `because two answers filed under it will be read as one repeating mistake.`,
+    prompt:
+      `Categories: ${vocabulary.join(", ")}\n\n` +
+      `He was asked: "${args.step.prompt}"\n` +
+      `The answer was: "${args.step.expects}"\n` +
+      `He wrote: "${args.gave}"`,
+  });
+  return out.error_tag;
 }
 
 /**
@@ -302,7 +365,7 @@ function buildBriefComponents(args: {
   component_types: z.infer<typeof BRIEF_LAYOUT_SCHEMA>["component_types"];
 }): Brief["components"] {
   const byDay = new Map(args.plan.days.map((day) => [day.day, day]));
-  const errors = args.attempts.filter((attempt) => !attempt.correct && attempt.error_tag !== "untagged");
+  const errors = args.attempts.filter((attempt) => !attempt.correct && attempt.error_tag !== UNTAGGED);
   const breakthrough = args.attempts.find(
     (attempt) => attempt.correct && attempt.gave.trim().split(/\s+/).length >= 3,
   );
@@ -328,10 +391,15 @@ function buildBriefComponents(args: {
       case "Streak":
         return { type, days_done: new Set(args.attempts.map((attempt) => attempt.day)).size, days_total: 6, note: null };
       case "ErrorGrid": {
-        const tag = errors[0]?.error_tag ?? "untagged";
+        const tag = errors[0]?.error_tag ?? UNTAGGED;
         return {
           type,
-          rule: tag === "strong-verb-vowel" ? "Strong verbs change their vowel in the past tense" : tag,
+          // The German set has an earned sentence; any other subject's tag is
+          // the tutor's own words already, so it is unhyphenated, not rewritten.
+          rule:
+            tag === "strong-verb-vowel"
+              ? "Strong verbs change their vowel in the past tense"
+              : tag.replace(/-/g, " "),
           rows: errors.map((attempt) => {
             const day = byDay.get(attempt.day);
             if (!day) throw new Error(`No plan day exists for attempt ${attempt.day}.`);
@@ -365,19 +433,47 @@ export async function composeBrief(args: {
 }): Promise<Brief> {
   const layout = await object({
     schema: BRIEF_LAYOUT_SCHEMA,
-    system: `You write a tutor's five-minute pre-lesson briefing. ${HOUSE_RULES}
+    system: `You are writing ONE sentence to a tutor who is about to walk into a
+lesson in five minutes. She taught this student last week. She knows the subject.
+She does not need teaching advice — she needs to know what happened while she
+wasn't there, and what to do with the fifty-five minutes.
+
+VOICE: a colleague who sat in on his week and is telling her about it on the way
+to the classroom. Plain, specific, warm, short. Fewer than twenty words.
+
+NEVER write these — they are pedagogy filler and say nothing:
+  "focus on"  "reinforce"  "continue to"  "areas for improvement"
+  "is struggling with"  "practice more"  "work on"  "before production"
+  "shows progress in"  "needs support with"
+
+DO:
+  - Name the actual thing, not the category. "the vowel change", not "verb forms".
+  - Quote HIS word when it carries the point. Untidied.
+  - Say what is worth doing with the lesson, if anything is.
+  - If he went quiet, say that and nothing else. Do not fill the silence.
+
+Bad:  "Focus on correcting vowel changes in past tense strong verbs before production."
+Good: "He keeps adding -te to strong verbs — sehte, nehmte. Ten minutes on the vowel would fix it."
+
+Bad:  "Jonas shows progress but needs support with irregular forms."
+Good: "Four days in a row, then nothing since Wednesday. Worth asking what changed."
+
+Bad:  "Student demonstrates understanding of the past tense rule."
+Good: "He explained the vowel rule back in his own words on Thursday. It's landed."
 
 The UI vocabulary is closed. Pick between two and five component_types; PlanLane
 is always last. You never write JSX or invent a component. If this is a quiet
-week, return ONLY QuietCard and PlanLane: no grid, no streak, no invented evidence.
-Only select a Breakthrough when a student wrote a complete sentence.`,
+week, return ONLY QuietCard and PlanLane: no grid, no streak, no invented
+evidence. Only select a Breakthrough when the student wrote a complete sentence
+of his own.`,
     prompt: `Student: ${args.student_id}
 Current plan v${args.plan.version}: ${JSON.stringify(args.plan.days)}
 Attempts: ${JSON.stringify(args.attempts.map((attempt) => ({ day: attempt.day, gave: attempt.gave, correct: attempt.correct, error_tag: attempt.error_tag })))}
 Quiet week: ${args.quiet}
 
-Choose the smallest useful briefing. The headline must tell the tutor something
-she cannot infer merely by reading component labels.`,
+Write the headline she reads first, then choose the smallest set of components
+that carries the evidence for it. The headline must tell her something she could
+NOT work out from the component labels alone.`,
   });
   const out = BRIEF_SCHEMA.parse({
     student_id: args.student_id,

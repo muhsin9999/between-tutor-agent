@@ -16,3 +16,5 @@ apps/mobile/.expo/
 # Web approval and attempt metadata (not task storage)
 .data/
 .playwright-mcp/
+apps/web/public/explain/
+.vercel
