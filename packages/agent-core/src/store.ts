@@ -55,8 +55,20 @@ export function update<T>(mutator: (store: Store) => T): T {
   const result = mutator(store);
   mkdirSync(dirname(FILE), { recursive: true });
   const tmp = `${FILE}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(store, null, 2), "utf8");
-  renameSync(tmp, FILE); // atomic on the same volume
+  const contents = JSON.stringify(store, null, 2);
+  writeFileSync(tmp, contents, "utf8");
+  try {
+    renameSync(tmp, FILE); // atomic on the same volume
+  } catch (cause) {
+    // OneDrive can momentarily hold the destination open on Windows. Retain the
+    // atomic path normally, but do not let a transient sync lock kill a live
+    // demo turn. The complete temp file is already written, so a direct replace
+    // is the least surprising fallback for this single-machine prototype.
+    const code = (cause as NodeJS.ErrnoException).code;
+    if (code !== "EPERM" && code !== "EACCES") throw cause;
+    writeFileSync(FILE, contents, "utf8");
+    rmSync(tmp, { force: true });
+  }
   return result;
 }
 

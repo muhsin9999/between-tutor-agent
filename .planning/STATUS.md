@@ -51,8 +51,8 @@ say it out loud. Never reach across.
 | T-B2 | `planWeek()` | B | ✅ | runs live, 6 sane German days, produce lands day 5 |
 | T-B3 | The clock — `/api/tick` + `DEMO_SPEED` | B | ✅ | `GET /api/tick?now=` reports due steps; `POST` resets a rehearsal while keeping enrolment |
 | T-B4 | `evidence.ts` triggers + grading order | B | ✅ | normalised exact match first; repeat-error trigger is deterministic and tested |
-| T-B5 | **`revisePlan()`** — never cut | B | 🟨 | `recordStudentTurn()` now invokes and appends it; needs one real Channel turn |
-| T-B6 | `composeBrief()` | B | 🟨 | closed-vocabulary composition and grounding checks are in; needs one live completion |
+| T-B5 | **`revisePlan()`** — never cut | B | ✅ | live fixture: two repeated strong-verb errors append legal v2; day 3 becomes `explain` |
+| T-B6 | `composeBrief()` | B | ✅ | live error and quiet fixtures return distinct validated component trees |
 | INT | Panel on real data, week run twice | both | ⬜ |
 | REC | **Backup take recorded** | both | ⬜ |
 

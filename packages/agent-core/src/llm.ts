@@ -168,6 +168,12 @@ You are REVISING a week already in progress.
 
   // Enforced in code, not hoped for in the prompt.
   assertRevisionLegal(args.plan, out);
+  for (const completed of done) {
+    const returned = out.days.find((day) => day.day === completed.day);
+    if (!returned || JSON.stringify(returned) !== JSON.stringify(completed)) {
+      throw new Error(`Revision changed completed day ${completed.day}.`);
+    }
+  }
 
   return {
     student_id: args.plan.student_id,
@@ -203,6 +209,134 @@ export async function nextStep(args: {
   });
 }
 
+/*
+ * OpenAI strict structured outputs reject JSON Schema `oneOf`; zod's
+ * discriminated union for BRIEF_COMPONENT_SCHEMA produces exactly that. The
+ * renderer contract remains the discriminated union in contracts.ts. Only the
+ * model transport is flattened, then converted straight back into the contract
+ * and validated before anything can render.
+ */
+const BRIEF_DRAFT_COMPONENT_SCHEMA = z.object({
+  type: z.enum(["Streak", "ErrorGrid", "AudioCompare", "QuietCard", "Breakthrough", "PraiseLine", "PlanLane"]),
+  days_done: z.number().int().nullable(),
+  days_total: z.number().int().nullable(),
+  note: z.string().nullable(),
+  rule: z.string().nullable(),
+  rows: z.array(z.object({ prompt: z.string(), gave: z.string(), wanted: z.string() })).nullable(),
+  item: z.string().nullable(),
+  student_audio_url: z.string().nullable(),
+  reference_text: z.string().nullable(),
+  last_seen_day: z.number().int().nullable(),
+  question: z.string().nullable(),
+  sentence: z.string().nullable(),
+  day: z.number().int().nullable(),
+  line: z.string().nullable(),
+  days: z.array(PLAN_DAYS_SCHEMA.shape.days.element).length(6).nullable(),
+  version: z.number().int().nullable(),
+  prior_version: z.number().int().nullable(),
+});
+
+const BRIEF_DRAFT_SCHEMA = z.object({
+  student_id: z.string(),
+  headline: z.string(),
+  components: z.array(BRIEF_DRAFT_COMPONENT_SCHEMA).min(2).max(5),
+});
+
+type BriefDraftComponent = z.infer<typeof BRIEF_DRAFT_COMPONENT_SCHEMA>;
+
+function required<T>(value: T | null, field: string): T {
+  if (value === null) throw new Error(`Brief component omitted required field '${field}'.`);
+  return value;
+}
+
+function toBriefComponent(component: BriefDraftComponent): Brief["components"][number] {
+  switch (component.type) {
+    case "Streak":
+      return { type: component.type, days_done: required(component.days_done, "days_done"), days_total: required(component.days_total, "days_total"), note: component.note };
+    case "ErrorGrid":
+      return { type: component.type, rule: required(component.rule, "rule"), rows: required(component.rows, "rows") };
+    case "AudioCompare":
+      return { type: component.type, item: required(component.item, "item"), student_audio_url: required(component.student_audio_url, "student_audio_url"), reference_text: required(component.reference_text, "reference_text") };
+    case "QuietCard":
+      return { type: component.type, last_seen_day: required(component.last_seen_day, "last_seen_day"), question: required(component.question, "question") };
+    case "Breakthrough":
+      return { type: component.type, sentence: required(component.sentence, "sentence"), day: required(component.day, "day") };
+    case "PraiseLine":
+      return { type: component.type, line: required(component.line, "line") };
+    case "PlanLane":
+      return { type: component.type, days: required(component.days, "days"), version: required(component.version, "version"), prior_version: component.prior_version };
+  }
+}
+
+const BRIEF_LAYOUT_SCHEMA = z.object({
+  headline: z.string(),
+  component_types: z
+    .array(z.enum(["Streak", "ErrorGrid", "AudioCompare", "QuietCard", "Breakthrough", "PraiseLine", "PlanLane"]))
+    .min(2)
+    .max(5),
+});
+
+function buildBriefComponents(args: {
+  plan: Plan;
+  attempts: Attempt[];
+  quiet: boolean;
+  component_types: z.infer<typeof BRIEF_LAYOUT_SCHEMA>["component_types"];
+}): Brief["components"] {
+  const byDay = new Map(args.plan.days.map((day) => [day.day, day]));
+  const errors = args.attempts.filter((attempt) => !attempt.correct && attempt.error_tag !== "untagged");
+  const breakthrough = args.attempts.find(
+    (attempt) => attempt.correct && attempt.gave.trim().split(/\s+/).length >= 3,
+  );
+  const available = new Set<Brief["components"][number]["type"]>(["PlanLane", "PraiseLine"]);
+  if (errors.length) available.add("ErrorGrid");
+  if (args.attempts.length) available.add("Streak");
+  if (args.quiet) available.add("QuietCard");
+  if (breakthrough) available.add("Breakthrough");
+
+  const requested: Brief["components"][number]["type"][] = args.quiet
+    ? ["QuietCard"]
+    : args.component_types.filter((type) => type !== "PlanLane" && available.has(type));
+  const fallback: Brief["components"][number]["type"][] = errors.length
+    ? ["ErrorGrid", "PraiseLine"]
+    : ["Streak", "PraiseLine"];
+  const types: Brief["components"][number]["type"][] = [
+    ...new Set(requested.length ? requested : fallback),
+    "PlanLane",
+  ];
+
+  return types.map((type) => {
+    switch (type) {
+      case "Streak":
+        return { type, days_done: new Set(args.attempts.map((attempt) => attempt.day)).size, days_total: 6, note: null };
+      case "ErrorGrid": {
+        const tag = errors[0]?.error_tag ?? "untagged";
+        return {
+          type,
+          rule: tag === "strong-verb-vowel" ? "Strong verbs change their vowel in the past tense" : tag,
+          rows: errors.map((attempt) => {
+            const day = byDay.get(attempt.day);
+            if (!day) throw new Error(`No plan day exists for attempt ${attempt.day}.`);
+            return { prompt: day.prompt, gave: attempt.gave, wanted: day.expects };
+          }),
+        };
+      }
+      case "QuietCard":
+        return { type, last_seen_day: Math.max(...args.attempts.map((attempt) => attempt.day), 0), question: "What made practice hard after the first day?" };
+      case "Breakthrough":
+        if (!breakthrough) throw new Error("Breakthrough was requested without a student sentence.");
+        return { type, sentence: breakthrough.gave, day: breakthrough.day };
+      case "PraiseLine":
+        return { type, line: errors.length ? "The repeated pattern is clear enough to address together." : "The week shows steady follow-through." };
+      case "PlanLane":
+        return { type, days: args.plan.days, version: args.plan.version, prior_version: args.plan.version > 1 ? args.plan.version - 1 : null };
+      case "AudioCompare":
+        throw new Error("AudioCompare needs a stored voice asset and is unavailable in this rehearsal.");
+      default:
+        throw new Error(`Unknown briefing component: ${String(type)}`);
+    }
+  });
+}
+
 /** T-B6 — model-selected composition over the fixed briefing vocabulary. */
 export async function composeBrief(args: {
   student_id: string;
@@ -210,15 +344,14 @@ export async function composeBrief(args: {
   attempts: Attempt[];
   quiet: boolean;
 }): Promise<Brief> {
-  const out = await object({
-    schema: BRIEF_SCHEMA,
+  const layout = await object({
+    schema: BRIEF_LAYOUT_SCHEMA,
     system: `You write a tutor's five-minute pre-lesson briefing. ${HOUSE_RULES}
 
-The UI vocabulary is closed. You compose typed data only; you never write JSX or
-invent a component. PlanLane is always last. Use between two and five components.
-Every ErrorGrid.gave and Breakthrough.sentence must quote a stored student answer
-verbatim. If this is a quiet week, return ONLY QuietCard and PlanLane: no grid,
-no streak, no invented evidence.`,
+The UI vocabulary is closed. Pick between two and five component_types; PlanLane
+is always last. You never write JSX or invent a component. If this is a quiet
+week, return ONLY QuietCard and PlanLane: no grid, no streak, no invented evidence.
+Only select a Breakthrough when a student wrote a complete sentence.`,
     prompt: `Student: ${args.student_id}
 Current plan v${args.plan.version}: ${JSON.stringify(args.plan.days)}
 Attempts: ${JSON.stringify(args.attempts.map((attempt) => ({ day: attempt.day, gave: attempt.gave, correct: attempt.correct, error_tag: attempt.error_tag })))}
@@ -226,6 +359,11 @@ Quiet week: ${args.quiet}
 
 Choose the smallest useful briefing. The headline must tell the tutor something
 she cannot infer merely by reading component labels.`,
+  });
+  const out = BRIEF_SCHEMA.parse({
+    student_id: args.student_id,
+    headline: layout.headline,
+    components: buildBriefComponents({ ...args, component_types: layout.component_types }),
   });
   assertBriefLegal(out);
   return out;
