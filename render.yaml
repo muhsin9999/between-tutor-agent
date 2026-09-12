@@ -17,6 +17,14 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # Signs the account-link token. It MUST be byte-identical to the value on
+      # the dashboard's Vercel project: apps/dashboard mints `link_<token>` with
+      # it and apps/channel/src/link.ts verifies with it. Absent, verifyLinkToken
+      # returns null on its first check and EVERY tap is refused with "that link
+      # is no longer valid" — which is what shipped, because this key was simply
+      # missing from this file.
+      - key: BETTER_AUTH_SECRET
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: MODEL
