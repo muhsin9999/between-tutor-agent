@@ -17,8 +17,8 @@ say it out loud. Never reach across.
 |---|---|
 | Block | **Gate 0** |
 | Clock | 12:50 → 13:10 |
-| A is on | A1 Telegram adapter spike |
-| B is on | B1 prove the key, then B2 contracts |
+| A · Muhsin is on | A1 Telegram adapter spike |
+| B · Mcjethro is on | B1 prove the key, then B2 contracts |
 | Next gate | 13:10 — all five [Gate 0 exit criteria](GATE-0.md#gate-0-exit-criteria) said out loud |
 
 ## Gate 0

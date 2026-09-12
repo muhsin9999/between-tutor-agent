@@ -9,8 +9,8 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 | Event | AI Tinkerers × OpenAI — "Agents, Everywhere", Abuja |
 | **Submit by** | **16:00 WAT today** |
 | Code freeze | **15:05 WAT** — nothing but copy changes after this |
-| Team | 2 humans (**A** and **B**) + AI agents |
-| Repo | `muhsin9999/between-tutor-agent` — **must be public before submit** |
+| Team | **Muhsin = Lane A** · **Mcjethro = Lane B** · plus AI agents |
+| Repo | `muhsin9999/between-tutor-agent` — ✅ already public |
 
 ## The map
 
@@ -28,7 +28,14 @@ One-line product: *a tutor sends one line after a lesson; the agent works the st
 
 ## Timeline
 
-| Time | Block | A | B |
+> **Lane assignment — swap it in the next 10 seconds if it's wrong, then leave it.**
+> **Muhsin on A** (the surface): he owns the repo, so BotFather, the tunnel and the
+> Telegram spike sit naturally with him. **Mcjethro on B** (the engine): `revisePlan`
+> and `composeBrief` are the don't-delegate work where knowing the product claim
+> matters most. To swap, change this table and the two headings — nothing else
+> depends on the letters.
+
+| Time | Block | A · Muhsin | B · Mcjethro |
 |---|---|---|---|
 | **12:50–13:10** | [Gate 0](GATE-0.md) | Telegram adapter spike + BotFather | Prove model key + write [CONTRACTS.md](CONTRACTS.md) |
 | **13:10–13:50** | Block 1 | Student chat alive, enrolment link | `planWeek` + `tick` + store |
@@ -62,7 +69,7 @@ is sufficient and costs zero setup. No Neon, no Drizzle, no migrations.
 Two people and several agents are writing at once. **Never edit a file in the other
 lane's column.** If you need a change there, write it in [STATUS.md](STATUS.md) and say it out loud.
 
-| A owns | B owns | Shared — frozen at 13:10 |
+| A · Muhsin owns | B · Mcjethro owns | Shared — frozen at 13:10 |
 |---|---|---|
 | `apps/channel/src/**` | `packages/agent-core/src/llm.ts` | `packages/agent-core/src/contracts.ts` |
 | `apps/web/src/app/panel/**` | `packages/agent-core/src/plan.ts` | [CONTRACTS.md](CONTRACTS.md) |

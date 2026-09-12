@@ -1,4 +1,4 @@
-# Lane B — the engine · planning, revision, composition
+# Lane B · Mcjethro — the engine · planning, revision, composition
 
 ← [BUILD.md](BUILD.md) · contracts: [CONTRACTS.md](CONTRACTS.md) · script: [FIXTURES.md](FIXTURES.md) · delegating: [AGENT-PROMPTS.md](AGENT-PROMPTS.md)
 

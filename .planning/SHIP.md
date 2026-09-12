@@ -33,7 +33,7 @@ Check the audio before you stop filming, and keep inside the event's limit.
 
 ## 15:25–15:40 · Writeup and repo
 
-**The repo must be public.** The triage repo is private on purpose — do not carry
+**The repo is already public** — verified 12:58. The triage repo is private on purpose; do not carry
 that pattern over. Then, in order:
 
 - [ ] `npm run verify` passes
