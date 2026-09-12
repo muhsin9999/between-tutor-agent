@@ -9,6 +9,8 @@
  */
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { persistence, store } from "agent-core";
 import type { Attempt, DayKind, Plan, PlanDay, Store } from "agent-core/contracts";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +43,14 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   const plan = history[history.length - 1];
   const attempts = state.attempts.filter((a) => a.student_id === id);
   const today = store.currentDay(new Date(), state);
-  const row = (await roster()).find((r) => r.id === id);
+  const session = await getSession(await headers());
+  const rows = await roster(session?.user.telegramUserId ?? null);
+  const row = rows.find((r) => r.id === id);
+
+  // Scoped, so a student who is not hers is not hers to read — even by id.
+  // Without this the roster filter would be cosmetic: anyone signed in could
+  // type another tutor's student id into the URL and get the whole week.
+  if (!row) notFound();
   const style = row ? NEED_STYLE[row.need] : NEED_STYLE["not-started"];
 
   const daysDone = new Set(attempts.map((a) => a.day)).size;

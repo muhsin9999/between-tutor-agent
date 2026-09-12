@@ -21,7 +21,39 @@
  * databases. `persistence` is the async one that uses Neon when `DATABASE_URL`
  * is set and falls back to the same JSON file when it is not, so this works in
  * both places. That is why `roster()` is async.
+ *
+ * **It is scoped to one tutor.** `persistence.read()` returns every student in
+ * the database, and rendering that was a leak waiting for a second tutor to sign
+ * up: she would have seen other people's students, by name, with their week's
+ * mistakes. The scope comes from the signed-in session's Telegram id, matched
+ * against `students.tutor_id` — never from anything the caller can put in a URL.
  */
+
+/**
+ * The student ids belonging to one tutor.
+ *
+ * `null` means "no scoping is possible here" — no database, so this is the local
+ * JSON store, which holds exactly one tutor by construction. Returning null
+ * rather than an empty set keeps the local dev experience working without
+ * turning "I cannot tell" into "she has no students".
+ */
+async function idsOwnedBy(tutorTelegramId: string): Promise<Set<string> | null> {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) return null;
+  try {
+    const sql = neon(connectionString);
+    const rows = (await sql`
+      SELECT id FROM students WHERE tutor_id = ${`telegram:${tutorTelegramId}`}
+    `) as { id: string }[];
+    return new Set(rows.map((r) => String(r.id)));
+  } catch (error) {
+    // Failing closed is the only safe direction: an error here must not fall
+    // back to "show everything".
+    console.error("[roster] could not scope students to this tutor:", error);
+    return new Set<string>();
+  }
+}
+import { neon } from "@neondatabase/serverless";
 import { persistence, store } from "agent-core";
 import type { Attempt, Plan } from "agent-core/contracts";
 
@@ -107,13 +139,26 @@ export function compareNeed(a: RosterRow, b: RosterRow): number {
   return a.lastSeenDay - b.lastSeenDay;
 }
 
-export async function roster(now: Date = new Date()): Promise<RosterRow[]> {
+/**
+ * @param tutorTelegramId the signed-in tutor's Telegram id. `null` when she has
+ *   not connected Telegram yet — she owns no students the bot can have filed, so
+ *   the honest answer is an empty roster and a prompt to connect.
+ */
+export async function roster(
+  tutorTelegramId: string | null,
+  now: Date = new Date(),
+): Promise<RosterRow[]> {
+  if (!tutorTelegramId) return [];
+
   const state = await persistence.read();
   const day = store.currentDay(now, state);
+  const mine = await idsOwnedBy(tutorTelegramId);
 
   // One read, then everything derived from it in memory. A per-student query
   // here would be one Neon round trip per row on a page that renders every row.
-  const rows = Object.values(state.students).map((student): RosterRow => {
+  const rows = Object.values(state.students)
+    .filter((student) => mine === null || mine.has(student.id))
+    .map((student): RosterRow => {
     const history = state.plans
       .filter((p) => p.student_id === student.id)
       .sort((a, b) => a.version - b.version);

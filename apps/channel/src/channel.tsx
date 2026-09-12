@@ -34,6 +34,7 @@ import {
 } from "./turns";
 import { extractVoice } from "./voice";
 import { handleLinkStart, isLinkStart, linkFailed, linkedConfirmation } from "./link";
+import { claimInvite, isInviteStart } from "./invite";
 import { required } from "./env";
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
@@ -131,6 +132,37 @@ const startCommand = defineChannelCommand({
     if (isLinkStart(payload)) {
       const linked = await handleLinkStart(payload, chatId);
       await thread.post(linked.ok ? linkedConfirmation(linked.name) : linkFailed(linked.reason));
+      return;
+    }
+
+    /*
+     * A per-student invite: `i<token>`, minted by the dashboard, carrying the
+     * name his tutor typed. He is enrolled AND named in one tap — no "what
+     * should I call you?", because she already answered that.
+     */
+    if (isInviteStart(payload)) {
+      const claim = await claimInvite(payload, chatId);
+      if (!claim.ok) {
+        await thread.post(<Message accent="#F5A623"><Section><Markdown>{claim.reason}</Markdown></Section></Message>);
+        return;
+      }
+      const existing = await store.studentByChat(chatId);
+      await store.upsertStudent(
+        { id: existing?.id ?? `s${chatId}`, name: claim.name, chat_id: chatId },
+        Number(claim.tutorTelegramId),
+      );
+      const plan = existing ? await store.latestPlan(existing.id) : undefined;
+      await thread.post(
+        <Message accent="#F5A623">
+          <Section>
+            <Markdown>
+              {plan
+                ? `Welcome back, ${claim.name}. Say anything and I'll give you today's question.`
+                : `You're in, ${claim.name}. I'll practise with you here when your tutor sets your week.`}
+            </Markdown>
+          </Section>
+        </Message>,
+      );
       return;
     }
 

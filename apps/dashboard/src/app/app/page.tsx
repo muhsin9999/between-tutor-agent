@@ -7,6 +7,8 @@
  * on the list who will not come back on her own.
  */
 import Link from "next/link";
+import { headers } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { roster, type RosterRow } from "@/lib/roster";
@@ -17,7 +19,11 @@ import { AddStudent } from "./add-student";
 export const dynamic = "force-dynamic";
 
 export default async function RosterPage() {
-  const rows = await roster();
+  // The roster is scoped to whoever is signed in. The layout has already
+  // redirected anyone without a session, so this is never anonymous.
+  const session = await getSession(await headers());
+  const telegramUserId = session?.user.telegramUserId ?? null;
+  const rows = await roster(telegramUserId);
   const needing = rows.filter((r) => r.need === "quiet" || r.need === "stuck").length;
   const day = rows[0]?.day ?? 0;
 
@@ -29,7 +35,9 @@ export default async function RosterPage() {
         </p>
         <h1 className="mt-3 text-pretty font-display text-3xl leading-tight text-cream md:text-4xl">
           {rows.length === 0
-            ? "No students yet."
+            ? telegramUserId
+              ? "No students yet."
+              : "Connect Telegram to see your students."
             : needing === 0
               ? "Everyone is moving."
               : `${needing} student${needing === 1 ? "" : "s"} need${needing === 1 ? "s" : ""} you this week.`}
@@ -49,7 +57,30 @@ export default async function RosterPage() {
         two separate boxes, so there is no second "no students yet" message here.
       */}
       <div className="rise mt-8" style={stagger(1)}>
-        <AddStudent empty={rows.length === 0} />
+        {telegramUserId ? (
+          <AddStudent empty={rows.length === 0} />
+        ) : (
+          /*
+            Without a linked Telegram account there is nothing to show and no
+            invite to mint — an invite carries her Telegram id, which is how the
+            bot knows whose student he is. So this replaces the add form rather
+            than sitting next to a version of it that can only fail.
+          */
+          <div className="rounded-lg border border-line bg-ink-850 p-6 sheet">
+            <p className="text-[15px] text-cream">Your Telegram account isn&apos;t connected yet.</p>
+            <p className="mt-2 text-sm text-cream-dim">
+              Your students live in Telegram, and an invite carries your Telegram
+              id — it is how the bot knows whose student someone is. Connect it
+              once and your roster fills in.
+            </p>
+            <Link
+              href="/app/settings"
+              className="mt-4 inline-flex items-center rounded-md bg-amber px-3.5 py-2 text-sm font-medium text-white transition-transform duration-150 ease-out active:scale-[0.97]"
+            >
+              Connect Telegram
+            </Link>
+          </div>
+        )}
       </div>
 
       {rows.length > 0 && (

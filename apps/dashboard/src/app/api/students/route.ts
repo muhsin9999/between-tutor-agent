@@ -14,14 +14,19 @@
  * account that is not theirs. So: no session, no invite, 401. Her Telegram id
  * comes from the verified session's `user.telegram_user_id`, never from the body.
  *
- * **What this endpoint honestly does not do.** `students.telegram_chat_id` is
- * `BIGINT NOT NULL UNIQUE` in `packages/agent-core/sql/001_initial.sql`, and his
- * chat id cannot be known until he taps the link. There is no correct value to
- * write, and inventing one would either collide with a real chat or plant a row
- * that the channel can never match him to. So when the column is NOT NULL we
- * write nothing and say so: the invite is minted, the row appears when he taps.
- * The nullability is read at runtime rather than assumed, so the day a migration
- * relaxes that column this route starts persisting the row without an edit.
+ * **The invite is per student, and it carries his name.** It used to be
+ * `t.me/<bot>?start=<her chat id>` — the same string for everyone she taught,
+ * so the bot learned only whose tutor she was and had to ask him his name,
+ * which is exactly the sign-up step ONBOARDING.md says a tap replaces. Now a
+ * row in `invites` (`sql/002_invites.sql`) holds the name and the tutor against
+ * a one-time token, and `apps/channel/src/invite.ts` redeems it.
+ *
+ * **What this endpoint still does not do.** `students.telegram_chat_id` is
+ * `BIGINT NOT NULL UNIQUE` in `sql/001_initial.sql`, and his chat id cannot be
+ * known until he taps. There is no correct value to write, and inventing one
+ * would either collide with a real chat or plant a row the channel can never
+ * match him to. So the student row appears when he taps; the invite row is
+ * what exists in the meantime, and it is the thing that remembers his name.
  */
 import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
@@ -53,16 +58,23 @@ interface PendingStudent {
   chat_id: null;
 }
 
+/** Longer than this and it will not survive Telegram's 64-character payload. */
+const MAX_TOKEN_PAYLOAD = 63;
+
 /**
- * A pending id: `pending_` plus 32 hex characters of randomness.
+ * An invite token: 16 hex characters, matching `TOKEN` in
+ * `apps/channel/src/invite.ts`. Short because Telegram caps the `/start`
+ * payload at 64 characters and the token travels inside it with a prefix.
  *
  * **Never derived from the name.** Two students called Jonas are two people, and
- * an id like `s_jonas` would make the second one silently overwrite the first on
- * a primary key — a child answering questions from another child's plan. The
- * name is a label; the id is an identity, and identities are minted, not spelled.
+ * a token like `jonas` would hand the second one the first one's invite. The
+ * name is a label; this is an identity, and identities are minted, not spelled.
+ *
+ * 64 bits of randomness: the token is one-time, expires on use, and guessing one
+ * wins nothing but the chance to be enrolled as somebody else's student.
  */
-function pendingId(): string {
-  return `pending_${randomUUID().replace(/-/g, "")}`;
+function inviteToken(): string {
+  return randomUUID().replace(/-/g, "").slice(0, 16);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -117,10 +129,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   /*
-   * The invite payload IS her Telegram chat id — `apps/channel/src/channel.tsx`
-   * checks `/start <payload>` against the stored tutor chat and only then asks
-   * the student his name. An invite minted with no tutor behind it opens a chat
-   * with the bot and enrols precisely nobody, so this is a 409 and not a link.
+   * The invite names the tutor it belongs to, so it cannot be minted without
+   * one: a link with no tutor behind it opens a chat with the bot and enrols
+   * precisely nobody. That is a 409, not a link.
    */
   const tutorTelegramId = session.user.telegramUserId;
   if (!tutorTelegramId) {
@@ -136,8 +147,18 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const student: PendingStudent = { id: pendingId(), name, chat_id: null };
-  const inviteUrl = `https://t.me/${bot}?start=${encodeURIComponent(tutorTelegramId)}`;
+  const token = inviteToken();
+  const student: PendingStudent = { id: `pending_${token}`, name, chat_id: null };
+  const inviteUrl = `https://t.me/${bot}?start=i${token}`;
+  if (inviteUrl.length > MAX_TOKEN_PAYLOAD + `https://t.me/${bot}?start=`.length) {
+    // Unreachable with a 16-character token; here so a future longer one fails
+    // loudly at the source rather than as a Telegram link that silently does
+    // nothing when tapped.
+    return Response.json(
+      { error: "token_too_long", message: "The invite token is too long for a Telegram link." },
+      { status: 500, headers: NO_STORE },
+    );
+  }
 
   const connectionString = env("DATABASE_URL");
   if (!connectionString) {
@@ -149,8 +170,8 @@ export async function POST(request: Request): Promise<Response> {
         persisted: false,
         inviteUrl,
         message:
-          "DATABASE_URL is not set on this server, so nothing was saved. The " +
-          "invite below still works — he appears on your roster when he taps it.",
+          "DATABASE_URL is not set on this server, so the invite was not saved. " +
+          "Send him the link anyway — he appears on your roster when he taps it.",
       },
       { headers: NO_STORE },
     );
@@ -160,74 +181,17 @@ export async function POST(request: Request): Promise<Response> {
     const sql = neon(connectionString);
 
     /*
-     * Ask the database what it will actually accept rather than trusting the
-     * checked-in migration. `telegram_chat_id NOT NULL` is the shipped shape and
-     * means the row cannot exist before he taps; `tutor_id NOT NULL` means it
-     * also needs a `tutors` row for her.
+     * The invite row IS the record of this student until he taps. It holds the
+     * name she typed and the tutor she is, so the bot can greet him correctly
+     * and file him under her without ever asking him anything.
+     *
+     * No student row is written here on purpose: `students.telegram_chat_id` is
+     * NOT NULL and his chat id cannot be known yet, so there is no honest value
+     * to put there.
      */
-    const columns = (await sql`
-      SELECT column_name, is_nullable
-        FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'students'
-         AND column_name IN ('telegram_chat_id', 'tutor_id')
-    `) as { column_name: string; is_nullable: string }[];
-
-    const nullable = (column: string) =>
-      columns.find((c) => c.column_name === column)?.is_nullable === "YES";
-
-    if (columns.length === 0) {
-      return Response.json(
-        {
-          student: null,
-          persisted: false,
-          inviteUrl,
-          message:
-            "There is no students table on this database yet, so nothing was " +
-            "saved. The invite still works — he appears when he taps it.",
-        },
-        { headers: NO_STORE },
-      );
-    }
-
-    if (!nullable("telegram_chat_id")) {
-      return Response.json(
-        {
-          student: null,
-          persisted: false,
-          inviteUrl,
-          message:
-            "Nothing is saved yet, on purpose: a student row needs his Telegram " +
-            "chat id and he has not tapped the link, so there is no honest value " +
-            "to write. Send him the link — he appears on your roster once he taps it.",
-        },
-        { headers: NO_STORE },
-      );
-    }
-
-    const tutorRows = (await sql`
-      SELECT id FROM tutors WHERE telegram_chat_id = ${tutorTelegramId}
-    `) as { id: string }[];
-    const tutorId = tutorRows[0]?.id ?? null;
-
-    if (!tutorId && !nullable("tutor_id")) {
-      return Response.json(
-        {
-          student: null,
-          persisted: false,
-          inviteUrl,
-          message:
-            "You do not have a tutor record on this database yet — send /tutor to " +
-            "the bot once and it creates one. Nothing was saved, but the invite " +
-            "below works and he appears when he taps it.",
-        },
-        { headers: NO_STORE },
-      );
-    }
-
     await sql`
-      INSERT INTO students (id, tutor_id, name, telegram_chat_id)
-      VALUES (${student.id}, ${tutorId}, ${student.name}, ${null})
+      INSERT INTO invites (token, tutor_telegram_id, student_name)
+      VALUES (${token}, ${String(tutorTelegramId)}, ${name})
     `;
 
     return Response.json(
@@ -236,23 +200,23 @@ export async function POST(request: Request): Promise<Response> {
         persisted: true,
         inviteUrl,
         message:
-          "Saved as invited. He is not enrolled until he taps the link and tells " +
-          "the bot his name.",
+          `Invite ready. When ${name} taps it the bot already knows his name — ` +
+          "he is on your roster from that moment, with nothing to sign up for.",
       },
       { headers: NO_STORE },
     );
   } catch (error) {
     // The invite is already valid and costs nothing to hand over, so a database
     // that is down loses the row, not the onboarding.
-    console.error("[students] could not write the student row:", error);
+    console.error("[students] could not write the invite row:", error);
     return Response.json(
       {
         student: null,
         persisted: false,
         inviteUrl,
         message:
-          "The database did not accept the row, so nothing was saved. The invite " +
-          "below still works — he appears on your roster when he taps it.",
+          "The database did not accept the invite, so his name was not saved. " +
+          "The link still works; the bot will ask him his name when he taps it.",
       },
       { headers: NO_STORE },
     );

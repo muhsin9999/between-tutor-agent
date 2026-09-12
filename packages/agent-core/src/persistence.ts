@@ -39,9 +39,21 @@ export async function setTutorChat(chat_id: number): Promise<void> {
   if (!hasNeonDatabase()) return json.setTutorChat(chat_id);
   await neonSql()`INSERT INTO tutors (id, telegram_chat_id) VALUES (${`telegram:${chat_id}`}, ${chat_id}) ON CONFLICT (telegram_chat_id) DO NOTHING`;
 }
-export async function upsertStudent(student: Student): Promise<void> {
+/**
+ * @param tutorChatId file the student under THIS tutor rather than the single
+ *   tutor in the store. A per-student invite carries the id of the tutor who
+ *   minted it, and that — not "whoever the bot saw first" — is whose student he
+ *   is. Omitted everywhere else, where the store's own tutor is correct.
+ */
+export async function upsertStudent(student: Student, tutorChatId?: number): Promise<void> {
   if (!hasNeonDatabase()) return json.upsertStudent(student);
-  await neonSql()`INSERT INTO students (id, tutor_id, name, telegram_chat_id) VALUES (${student.id}, ${await tutorId()}, ${student.name}, ${student.chat_id}) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, telegram_chat_id = EXCLUDED.telegram_chat_id`;
+  const owner = tutorChatId === undefined ? await tutorId() : `telegram:${tutorChatId}`;
+  // The tutors row has to exist first: students.tutor_id is a foreign key, and
+  // an invited student can arrive before his tutor has ever messaged the bot.
+  if (tutorChatId !== undefined) {
+    await neonSql()`INSERT INTO tutors (id, telegram_chat_id) VALUES (${owner}, ${tutorChatId}) ON CONFLICT (telegram_chat_id) DO NOTHING`;
+  }
+  await neonSql()`INSERT INTO students (id, tutor_id, name, telegram_chat_id) VALUES (${student.id}, ${owner}, ${student.name}, ${student.chat_id}) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, telegram_chat_id = EXCLUDED.telegram_chat_id`;
 }
 export async function studentByChat(chat_id: number): Promise<Student | undefined> { return Object.values((await read()).students).find((s) => s.chat_id === chat_id); }
 export async function addPlan(plan: Plan): Promise<void> {
