@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 import { OAuthButton } from "@/components/ui/oauth-button";
+import { signIn } from "@/lib/auth-client";
+import type { AuthStatus } from "@/lib/auth";
 
 /* ------------------------------------------------------------------- marks */
 /* Inline, never fetched: a sign-in button that waits on a third-party image
@@ -49,14 +51,25 @@ function GoogleMark() {
 
 type Provider = "telegram" | "google";
 
-/* What each button *will* do, said plainly, so a tap tells the truth instead
-   of inventing a session. */
-const WHAT_IT_WILL_DO: Record<Provider, string> = {
-  telegram:
-    "This will open Telegram’s login widget and join that account to this dashboard — one tutor, both places. Nothing was sent, and no account was created.",
-  google:
-    "This will hand off to Google and come back with a signed-in session. Nothing was sent, and no account was created.",
-};
+/**
+ * Telegram is the one button here that is still a stub, and it says so.
+ *
+ * Better Auth has no Telegram provider, and Telegram is not an OAuth 2 identity
+ * provider at all — there is no authorize URL to redirect to. Signing in with
+ * Telegram means embedding *their* Login Widget, which posts back a payload
+ * signed with a key derived from the bot token, plus a BotFather `/setdomain`
+ * registering the exact origin the widget is allowed to run on. Neither is
+ * something a redirect can fake, so this button does not pretend.
+ *
+ * The full integration plan is in `docs/AUTH-SETUP.md`.
+ */
+const TELEGRAM_NOTICE =
+  "And it cannot be faked with a redirect. Telegram is not an OAuth provider: signing in this " +
+  "way needs Telegram’s own Login Widget, which posts back a payload signed with the bot token, " +
+  "plus a BotFather /setdomain registering this exact origin — without which the widget will not " +
+  "render at all. Neither exists yet, so nothing was sent and no account was created. Use Google " +
+  "or the email link below; you can attach this Telegram account afterwards from Settings, which " +
+  "is the direction onboarding takes anyway.";
 
 /* The notice belongs under the button that was pressed, not under the group —
    an explanation two rows away from the thing it explains is an explanation
@@ -67,32 +80,67 @@ const NOTICE_CLASS =
 
 function Notice({
   id,
-  provider,
-  shown,
+  lead,
+  children,
 }: {
   id: string;
-  provider: Provider;
-  shown: boolean;
+  lead?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <p id={id} role="status" aria-live="polite" className={NOTICE_CLASS}>
-      {shown ? (
+      {children ? (
         <>
-          <span className="text-stuck">Not wired yet.</span>{" "}
-          {WHAT_IT_WILL_DO[provider]}
+          {lead ? <span className="text-stuck">{lead}</span> : null}
+          {lead ? " " : null}
+          {children}
         </>
       ) : null}
     </p>
   );
 }
 
-export default function Providers() {
+export default function Providers({ status }: { status: AuthStatus | null }) {
   const [tapped, setTapped] = useState<Provider | null>(null);
+  const [handoff, setHandoff] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const base = useId();
   const noticeId: Record<Provider, string> = {
     telegram: `${base}-telegram`,
     google: `${base}-google`,
   };
+
+  /* `status === null` means we have not heard back from /api/auth/_status yet.
+     That window is milliseconds, so the buttons stay live through it rather
+     than flickering from disabled to enabled in front of the tutor. */
+  const known = status !== null;
+  const googleReady = status?.configured === true && status.google === true;
+
+  async function continueWithGoogle() {
+    setTapped("google");
+    setGoogleError(null);
+
+    if (known && !googleReady) return;
+
+    setHandoff(true);
+    /* A real handoff: this navigates away to Google. If it comes back instead,
+       it came back with a reason, and the reason is what gets shown. */
+    const { error } = await signIn.social({
+      provider: "google",
+      callbackURL: "/app",
+      errorCallbackURL: "/sign-in",
+    });
+
+    if (error) {
+      setHandoff(false);
+      setGoogleError(
+        error.message ??
+          "Google turned the request down. Nothing was created — try the email link below.",
+      );
+    }
+  }
+
+  const showGoogleNotice = tapped === "google" && (!googleReady || googleError);
 
   return (
     <div>
@@ -108,30 +156,38 @@ export default function Providers() {
         this dashboard, so your students come with you.
       </p>
 
-      <Notice
-        id={noticeId.telegram}
-        provider="telegram"
-        shown={tapped === "telegram"}
-      />
+      <Notice id={noticeId.telegram} lead="Not wired yet.">
+        {tapped === "telegram" ? TELEGRAM_NOTICE : null}
+      </Notice>
 
       <div className="mt-4">
         <OAuthButton
           provider="Google"
           icon={<GoogleMark />}
-          onClick={() => setTapped("google")}
-          aria-describedby={tapped === "google" ? noticeId.google : undefined}
-        />
+          loading={handoff}
+          disabled={known && !googleReady}
+          onClick={continueWithGoogle}
+          aria-describedby={showGoogleNotice ? noticeId.google : undefined}
+        >
+          {handoff ? "Taking you to Google…" : undefined}
+        </OAuthButton>
 
         <Notice
           id={noticeId.google}
-          provider="google"
-          shown={tapped === "google"}
-        />
+          lead={googleError ? undefined : "Not configured."}
+        >
+          {showGoogleNotice
+            ? googleError ??
+              (status?.configured === false
+                ? "This server has no DATABASE_URL, so there is nowhere to keep a session. Nothing was sent and no account was created."
+                : "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are not set on this server, so there is nothing to hand off to. Nothing was sent and no account was created.")
+            : null}
+        </Notice>
       </div>
     </div>
   );
 }
 
-/* The buttons carry a `loading` state (see OAuthButton) for the redirect wait
-   that arrives with Better Auth. It is deliberately not faked here: a spinner
-   that spins over nothing is the same lie as a fake success. */
+/* The buttons carry a `loading` state (see OAuthButton) for the redirect wait.
+   It is set only around the real Google handoff — a spinner that spins over
+   nothing is the same lie as a fake success, so Telegram never gets one. */

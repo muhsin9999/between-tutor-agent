@@ -5,18 +5,36 @@
  * carries the mark, who you are, and two links — and then gets out of the way,
  * because the thing worth looking at is the roster, not the furniture.
  *
- * The tutor's name is a placeholder until Better Auth lands (see AUTH.md); the
- * Telegram line beneath it is real, read from the store. Labelled honestly so
- * nobody mistakes the stub for a session.
+ * **This layout is the session guard.** Every route under `/app` renders inside
+ * it, so a redirect here is a redirect for all of them, and there is no page a
+ * signed-out visitor can reach by typing its URL. `getSession` returns `null`
+ * rather than throwing when auth is unconfigured, which is the same answer as
+ * "nobody is signed in" — so an unprovisioned server sends you to `/sign-in`,
+ * where the page explains exactly what is missing, instead of showing a shell
+ * that implies an account exists.
+ *
+ * The Telegram line beneath the name is read from the store and is real; per
+ * AUTH.md it becomes `user.telegramUserId` once the link flow lands.
  */
 import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { store } from "agent-core";
+import { getSession } from "@/lib/auth";
 import { Nav } from "./_nav";
 
 export const dynamic = "force-dynamic";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await getSession(await headers());
+  if (!session) redirect("/sign-in");
+
   const tutorChat = store.read().tutor.chat_id;
+  const tutorName = session.user.name?.trim() || session.user.email;
 
   return (
     <div className="md:flex md:min-h-screen">
@@ -30,12 +48,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Nav />
 
           <div className="hidden md:mt-auto md:block">
-            <p className="text-sm text-cream">Tutor</p>
+            <p className="truncate text-sm text-cream" title={tutorName}>
+              {tutorName}
+            </p>
             <p className="mt-0.5 text-xs text-cream-faint">
               {tutorChat === null ? "Telegram not linked" : "Telegram linked"}
-            </p>
-            <p className="mt-3 text-[11px] leading-snug text-cream-faint">
-              Sign-in is not wired yet — this is the only account on the machine.
             </p>
           </div>
         </div>

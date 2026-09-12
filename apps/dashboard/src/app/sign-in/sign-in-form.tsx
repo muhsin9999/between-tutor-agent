@@ -1,11 +1,13 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Providers from "./providers";
+import { fetchAuthStatus, signIn } from "@/lib/auth-client";
+import type { AuthStatus } from "@/lib/auth";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-type Status = "idle" | "sent";
+type Status = "idle" | "sending" | "sent";
 
 /* --------------------------------------------------------------- the field */
 /* Not a bare input: a labelled shell that owns its own focus treatment,
@@ -87,6 +89,22 @@ export default function SignInForm() {
   const [sentTo, setSentTo] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  /* What is actually wired on this server. `null` until the answer arrives —
+     treated as "unknown", never as "configured", so the page cannot claim a
+     capability it has not confirmed. See lib/auth-client.ts. */
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    void fetchAuthStatus(abort.signal).then((s) => {
+      if (!abort.signal.aborted) setAuth(s);
+    });
+    return () => abort.abort();
+  }, []);
+
+  const ready = auth?.configured === true;
+  /* The link exists either way; the honest difference is where it came out. */
+  const emailed = auth?.emailDelivery === "resend";
+
   function validate(v: string): string | null {
     const trimmed = v.trim();
     if (!trimmed) return "Enter the email you want the link sent to.";
@@ -95,7 +113,7 @@ export default function SignInForm() {
     return null;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const problem = validate(email);
     setError(problem);
@@ -103,7 +121,31 @@ export default function SignInForm() {
       inputRef.current?.focus();
       return;
     }
-    setSentTo(email.trim());
+
+    const address = email.trim();
+    setStatus("sending");
+
+    /* The real send. Better Auth mints a single-use token, stores it, and hands
+       the URL to `sendMagicLink` on the server — which either emails it through
+       Resend or, with no key set, prints it to the server console. The reply
+       below is worded from `auth.emailDelivery`, so it never says "check your
+       email" for a link that only ever reached a terminal. */
+    const { error: sendError } = await signIn.magicLink({
+      email: address,
+      callbackURL: "/app",
+    });
+
+    if (sendError) {
+      setStatus("idle");
+      setError(
+        sendError.message ??
+          "The link could not be sent. Nothing was created — try again in a moment.",
+      );
+      inputRef.current?.focus();
+      return;
+    }
+
+    setSentTo(address);
     setStatus("sent");
   }
 
@@ -111,16 +153,28 @@ export default function SignInForm() {
     return (
       <div className="rise">
         <p className="text-[11px] uppercase tracking-[0.16em] text-amber">
-          Link sent
+          {emailed ? "Link sent" : "Link created"}
         </p>
         <h2 className="mt-4 font-display text-[clamp(1.75rem,5vw,2.5rem)] leading-[1.1] tracking-[-0.02em]">
-          Check your email
+          {emailed ? "Check your email" : "Check the server console"}
         </h2>
-        <p className="mt-5 max-w-[46ch] text-[15px] leading-[1.65] text-cream-dim">
-          A link is on its way to{" "}
-          <span className="text-cream">{sentTo}</span>. Clicking it signs you in
-          and creates the account. There is no password to set.
-        </p>
+        {emailed ? (
+          <p className="mt-5 max-w-[46ch] text-[15px] leading-[1.65] text-cream-dim">
+            A link is on its way to{" "}
+            <span className="text-cream">{sentTo}</span>. Clicking it signs you
+            in and creates the account. There is no password to set.
+          </p>
+        ) : (
+          <p className="mt-5 max-w-[46ch] text-[15px] leading-[1.65] text-cream-dim">
+            A real, single-use link for{" "}
+            <span className="text-cream">{sentTo}</span> exists — but{" "}
+            <span className="text-stuck">no email was sent</span>, because{" "}
+            <code className="text-cream">RESEND_API_KEY</code> is not set on this
+            server. It was printed to the terminal running the dev server
+            instead. Paste it into the address bar and the sign-in is genuinely
+            end-to-end.
+          </p>
+        )}
 
         <ol className="mt-9 border-t border-line">
           {[
@@ -172,7 +226,7 @@ export default function SignInForm() {
 
       {/* The fast path first: most tutors already have one of these open. */}
       <div className="mt-10">
-        <Providers />
+        <Providers status={auth} />
       </div>
 
       <div className="my-8 flex items-center gap-4" aria-hidden="true">
@@ -199,18 +253,50 @@ export default function SignInForm() {
 
         <button
           type="submit"
-          className="mt-7 inline-flex w-full items-center justify-center rounded-[3px] bg-amber px-6 py-3.5 text-[14px] font-medium text-ink-900 transition-[transform,background-color] duration-200 ease-[var(--ease-out-strong)] hover:bg-amber-soft active:scale-[0.97] sm:w-auto"
+          disabled={status === "sending" || auth?.configured === false}
+          className="mt-7 inline-flex w-full items-center justify-center rounded-[3px] bg-amber px-6 py-3.5 text-[14px] font-medium text-ink-900 transition-[transform,background-color] duration-200 ease-[var(--ease-out-strong)] hover:bg-amber-soft active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-ink-800 disabled:text-cream-faint disabled:active:scale-100 sm:w-auto"
         >
-          Send me a link
+          {status === "sending" ? "Sending…" : "Send me a link"}
         </button>
       </form>
 
-      <p className="mt-10 border-t border-line pt-6 text-[13px] leading-[1.6] text-cream-faint">
-        <span className="text-stuck">Not wired yet.</span> Nothing on this page
-        sends anything or creates an account &mdash; email, Telegram and Google
-        alike. It is the shape of the flow, not the flow. Sign-in lands with the
-        database and Better Auth.
-      </p>
+      {/* The truth about this server, stated once, at the bottom. It is read
+          from /api/auth/_status rather than asserted, so it cannot drift out of
+          date the way the previous hard-coded "not wired yet" line would have. */}
+      {auth === null ? (
+        <p className="mt-10 border-t border-line pt-6 text-[13px] leading-[1.6] text-cream-faint">
+          Checking what this server has configured&hellip;
+        </p>
+      ) : !ready ? (
+        <p className="mt-10 border-t border-line pt-6 text-[13px] leading-[1.6] text-cream-faint">
+          <span className="text-stuck">Sign-in is not configured.</span> Better
+          Auth is wired up, but this server has no{" "}
+          <code className="text-cream">DATABASE_URL</code>, so there is nowhere
+          to keep a session and nothing here can create an account. Set it and
+          restart &mdash; <code className="text-cream">docs/AUTH-SETUP.md</code>{" "}
+          has the four lines. Your student needs none of this: he never signs up.
+        </p>
+      ) : (
+        <p className="mt-10 border-t border-line pt-6 text-[13px] leading-[1.6] text-cream-faint">
+          Real sign-in. The link is single-use and expires in ten minutes.
+          {!emailed ? (
+            <>
+              {" "}
+              <span className="text-stuck">Email delivery is off</span> &mdash;
+              with no <code className="text-cream">RESEND_API_KEY</code> the link
+              is printed to the server console instead of sent.
+            </>
+          ) : null}
+          {!auth.google ? (
+            <>
+              {" "}
+              Google is unavailable until{" "}
+              <code className="text-cream">GOOGLE_CLIENT_ID</code> and{" "}
+              <code className="text-cream">GOOGLE_CLIENT_SECRET</code> are set.
+            </>
+          ) : null}
+        </p>
+      )}
     </div>
   );
 }
