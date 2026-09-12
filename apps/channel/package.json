@@ -5,8 +5,8 @@
   "type": "module",
   "description": "The agent, living in a Slack or Teams thread, via CopilotKit Channels.",
   "scripts": {
-    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
-    "start": "node --env-file=../../.env --import tsx src/server.ts",
+    "dev": "node --env-file-if-exists=../../env --import tsx --watch src/server.ts",
+    "start": "node --env-file-if-exists=../../env --import tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test 'src/**/*.test.tsx'"
   },
