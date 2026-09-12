@@ -104,6 +104,24 @@ Hard rules:
   speaking, do not put a "produce" day first; earn it later in the week.
 `.trim();
 
+/** The scripted demo is deliberately a closed, six-verb lesson—not a curriculum generator. */
+export const GERMAN_FIXTURE_TARGETS = ["gehen", "sehen", "nehmen", "sprechen", "trinken", "fahren"] as const;
+
+function isGermanFixture(tutorLine: string): boolean {
+  return /german\s+past\s+tense\s+of\s+irregular\s+verbs/i.test(tutorLine);
+}
+
+/**
+ * The model receives this rule in the prompt, and this post-condition keeps a
+ * verbose completion from turning the fixed six-verb demonstration into an
+ * invented curriculum. Other tutor lines preserve their explicitly supplied
+ * target set untouched.
+ */
+export function constrainFixtureTargets(tutorLine: string, days: PlanDay[]): PlanDay[] {
+  if (!isGermanFixture(tutorLine)) return days;
+  return days.map((day) => ({ ...day, target_items: [...GERMAN_FIXTURE_TARGETS] }));
+}
+
 /**
  * T-B2 — the tutor's one line becomes six days.
  * This is the only thing she types all week, so the plan has to carry the weight.
@@ -116,8 +134,9 @@ export async function planWeek(args: {
     schema: PLAN_DAYS_SCHEMA,
     system: HOUSE_RULES,
     prompt: `The tutor wrote this at the end of today's lesson:\n\n"${args.tutor_line}"\n\n` +
-      `Plan the six days before the next lesson. Derive target_items from her line and ` +
-      `reuse that same closed set across the days. For "reason", write one sentence ` +
+      `Plan the six days before the next lesson. Reuse one closed target_items set across the days. ` +
+      `For the German irregular-past-tense demo, target_items MUST be exactly gehen, sehen, nehmen, sprechen, trinken, fahren—never add another verb. ` +
+      `For "reason", write one sentence ` +
       `describing the shape of the week and why it is in that order.`,
   });
 
@@ -126,7 +145,7 @@ export async function planWeek(args: {
     version: 1,
     reason: out.reason,
     created_at: new Date().toISOString(),
-    days: out.days,
+    days: constrainFixtureTargets(args.tutor_line, out.days),
   };
 }
 

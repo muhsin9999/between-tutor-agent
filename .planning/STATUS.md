@@ -94,3 +94,4 @@ agent can see it. A contract change needs **both** of you, out loud.
 | 12:58 | `TelegramInlineButton` is a first-class payload type, so Channels `<Button>` renders as a **native inline keyboard**. The ≤8-choice rule costs us nothing to honour. |
 | 13:00 | **Tunnel up:** `https://deal-blake-miller-los.trycloudflare.com` -> :3100, verified 200. Mini App URL is that + `/panel`. UDP/QUIC is blocked on this network — cloudflared fell back to HTTP/2; if it flaps, restart with `--protocol http2`. The URL dies with the process, so if you restart the tunnel you must re-run `/newapp` with the new one. |
 | 12:58 | A tunnel is still needed for the **Mini App panel** (apps/web on :3100) — just not for the bot. |
+| 13:xx | **German fixture target set is pinned in `llm.ts`:** `gehen, sehen, nehmen, sprechen, trinken, fahren`. The planner cannot expand the demo into an invented curriculum. |
