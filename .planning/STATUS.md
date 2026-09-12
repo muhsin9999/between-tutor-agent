@@ -28,7 +28,7 @@ say it out loud. Never reach across.
 
 | Check | Owner | State | Note |
 |---|---|---|---|
-| A1 transport decided — (a) (b) or (c) | A | ⬜ | |
+| A1 transport decided — (a) (b) or (c) | A | ✅ | **(a)** `telegram({ token })` direct, long-polling by default. No tunnel for the bot. |
 | A2 bot + Mini App URL registered | A | ⬜ | |
 | A3 Telegram Desktop logged in | A | ⬜ | |
 | B1 real completion came back | B | ✅ | openai · gpt-4.1-mini · ~5s |
@@ -87,4 +87,7 @@ agent can see it. A contract change needs **both** of you, out loud.
 
 | Time | Decision |
 |---|---|
-| | |
+| 12:58 | **Transport = path (a).** `@copilotkit/channels/telegram` exports `telegram(opts)` taking a bot token directly; `mode` defaults to `"polling"` (long-polling over grammY), so the bot needs **no public URL and no ngrok**. Webhook mode exists but is opt-in. The grammy fallback is dead — we ride Channels on both legs, so CopilotKit is load-bearing in the student chat too, not just the panel. |
+| 12:58 | **The option is `token`, NOT `botToken`.** The Slack example in SKILL.md uses `botToken` — adapters differ. `TelegramAdapterOptions = { token, mode?, webhook?, greeting?, suggestedPrompts?, showToolStatus?, interruptEventNames? }`. |
+| 12:58 | `TelegramInlineButton` is a first-class payload type, so Channels `<Button>` renders as a **native inline keyboard**. The ≤8-choice rule costs us nothing to honour. |
+| 12:58 | A tunnel is still needed for the **Mini App panel** (apps/web on :3100) — just not for the bot. |
