@@ -12,7 +12,7 @@
  * confirmation step.
  */
 import { headers } from "next/headers";
-import { store } from "agent-core";
+import { persistence } from "agent-core";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getSession } from "@/lib/auth";
@@ -35,7 +35,7 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
 });
 
 export default async function SettingsPage() {
-  const state = store.read();
+  const state = await persistence.read();
   const students = Object.values(state.students);
   const tutorChat = state.tutor.chat_id;
 

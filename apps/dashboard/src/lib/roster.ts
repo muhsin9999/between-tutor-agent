@@ -10,10 +10,19 @@
  * `evidence.ts`. A list does not need a model, and a model here would add three
  * seconds and nothing else.
  *
- * Re-homed from `apps/web/src/lib/tutor-roster.ts`, unchanged. The prototype
- * proved it reads well; the dashboard is where it lives now.
+ * Re-homed from `apps/web/src/lib/tutor-roster.ts`. The prototype proved it
+ * reads well; the dashboard is where it lives now.
+ *
+ * **It reads `persistence`, not `store`.** `store` is the synchronous JSON file
+ * under `.data/`, which exists on a laptop and NOWHERE on Vercel — a serverless
+ * function gets a fresh, empty filesystem. Reading it in production returned an
+ * empty roster for every tutor, always, no matter how many students the bot had
+ * actually enrolled: the dashboard and the bot were looking at two different
+ * databases. `persistence` is the async one that uses Neon when `DATABASE_URL`
+ * is set and falls back to the same JSON file when it is not, so this works in
+ * both places. That is why `roster()` is async.
  */
-import { store } from "agent-core";
+import { persistence, store } from "agent-core";
 import type { Attempt, Plan } from "agent-core/contracts";
 
 /** Ordered by urgency. The array order IS the sort order — see `compareNeed`. */
@@ -98,19 +107,27 @@ export function compareNeed(a: RosterRow, b: RosterRow): number {
   return a.lastSeenDay - b.lastSeenDay;
 }
 
-export function roster(now: Date = new Date()): RosterRow[] {
-  const state = store.read();
-  const day = store.currentDay(now);
+export async function roster(now: Date = new Date()): Promise<RosterRow[]> {
+  const state = await persistence.read();
+  const day = store.currentDay(now, state);
 
+  // One read, then everything derived from it in memory. A per-student query
+  // here would be one Neon round trip per row on a page that renders every row.
   const rows = Object.values(state.students).map((student): RosterRow => {
-    const plan = store.latestPlan(student.id);
-    const attempts = store.attemptsFor(student.id);
-    const versions = store.planHistory(student.id).map((p) => p.version);
+    const history = state.plans
+      .filter((p) => p.student_id === student.id)
+      .sort((a, b) => a.version - b.version);
+    const plan = history[history.length - 1];
+    const attempts = state.attempts.filter((a) => a.student_id === student.id);
+    const versions = history.map((p) => p.version);
     const { need, because } = assess(plan, attempts, day);
 
     return {
       id: student.id,
-      name: student.name,
+      // A student who has tapped his invite but not yet typed his name is a real
+      // row with an empty name. He belongs on the roster — she needs to see the
+      // tap landed — but a blank line reads as a rendering bug, so he is labelled.
+      name: student.name.trim() || "Just joined — no name yet",
       need,
       because,
       day,

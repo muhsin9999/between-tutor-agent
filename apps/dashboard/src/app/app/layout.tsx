@@ -19,7 +19,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { store } from "agent-core";
+import { persistence } from "agent-core";
 import { getSession } from "@/lib/auth";
 import { Nav } from "./_nav";
 
@@ -33,7 +33,9 @@ export default async function AppLayout({
   const session = await getSession(await headers());
   if (!session) redirect("/sign-in");
 
-  const tutorChat = store.read().tutor.chat_id;
+  // `persistence`, not `store`: the JSON file `store` reads does not exist on
+  // Vercel, so this was always null in production.
+  const tutorChat = (await persistence.read()).tutor.chat_id;
   const tutorName = session.user.name?.trim() || session.user.email;
 
   return (

@@ -9,8 +9,8 @@
  */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { store } from "agent-core";
-import type { Attempt, DayKind, Plan, PlanDay } from "agent-core/contracts";
+import { persistence, store } from "agent-core";
+import type { Attempt, DayKind, Plan, PlanDay, Store } from "agent-core/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { roster } from "@/lib/roster";
@@ -29,14 +29,19 @@ const KIND_LABEL: Record<DayKind, string> = {
 export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const student = store.read().students[id];
+  // One Neon read for the whole page. `store` reads a JSON file that does not
+  // exist on Vercel, which rendered every student as notFound() in production.
+  const state = await persistence.read();
+  const student = state.students[id];
   if (!student) notFound();
 
-  const history = store.planHistory(id);
-  const plan = store.latestPlan(id);
-  const attempts = store.attemptsFor(id);
-  const today = store.currentDay();
-  const row = roster().find((r) => r.id === id);
+  const history = state.plans
+    .filter((p) => p.student_id === id)
+    .sort((a, b) => a.version - b.version);
+  const plan = history[history.length - 1];
+  const attempts = state.attempts.filter((a) => a.student_id === id);
+  const today = store.currentDay(new Date(), state);
+  const row = (await roster()).find((r) => r.id === id);
   const style = row ? NEED_STYLE[row.need] : NEED_STYLE["not-started"];
 
   const daysDone = new Set(attempts.map((a) => a.day)).size;
@@ -69,7 +74,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         </div>
       </header>
 
-      <Revision history={history} className="rise mt-8" style={stagger(1)} />
+      <Revision history={history} state={state} className="rise mt-8" style={stagger(1)} />
 
       <section className="rise mt-10" style={stagger(2)}>
         <h2 className="text-xs uppercase tracking-[0.14em] text-cream-faint">This week</h2>
@@ -105,10 +110,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
 function Revision({
   history,
+  state,
   className,
   style,
 }: {
   history: Plan[];
+  /** Passed down so the demo clock comes from Neon, not a local JSON file. */
+  state: Store;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -128,7 +136,7 @@ function Revision({
     );
   }
 
-  const changedOn = store.currentDay(new Date(latest.created_at));
+  const changedOn = store.currentDay(new Date(latest.created_at), state);
 
   return (
     <Card className={`border-amber/30 p-6 md:p-7 ${className ?? ""}`} style={style}>

@@ -16,8 +16,8 @@ import { AddStudent } from "./add-student";
 
 export const dynamic = "force-dynamic";
 
-export default function RosterPage() {
-  const rows = roster();
+export default async function RosterPage() {
+  const rows = await roster();
   const needing = rows.filter((r) => r.need === "quiet" || r.need === "stuck").length;
   const day = rows[0]?.day ?? 0;
 

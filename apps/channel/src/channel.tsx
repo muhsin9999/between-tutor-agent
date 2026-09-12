@@ -52,7 +52,18 @@ const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? "between_tutor_bot";
 const PANEL_ORIGIN =
   (process.env.PUBLIC_APP_URL || "https://between-panel.vercel.app").replace(/\/+$/, "");
 const PANEL_URL = `${PANEL_ORIGIN}/panel`;
-const pendingEnrollments = new Map<number, { tutorChatId: number }>();
+/**
+ * A student who has tapped a valid invite but has not told us his name yet is
+ * stored as a real row with an EMPTY name — not held in a Map in this process.
+ *
+ * Render's free tier spins the bot down after fifteen quiet minutes, and an
+ * in-memory Map does not survive that. A student who tapped the link, put his
+ * phone away and came back to type his name landed in a process that had never
+ * heard of him, so the tap enrolled nobody and the tutor's roster stayed empty.
+ * A row written at tap time is the fix: the worst a restart can now cost is the
+ * name, and he is on her roster either way.
+ */
+const AWAITING_NAME = "";
 
 async function studentNamed(line: string) {
   const name = line.split(/[—–-]/, 1)[0]?.trim().toLowerCase();
@@ -125,7 +136,14 @@ const startCommand = defineChannelCommand({
 
     const tutorChatId = Number(payload);
     const validInvite = Number.isSafeInteger(tutorChatId) && tutorChatId === (await store.read()).tutor.chat_id;
-    if (validInvite) pendingEnrollments.set(chatId, { tutorChatId });
+    if (validInvite) {
+      // Only if he is not already enrolled — re-tapping an invite must never
+      // wipe the name of a student who is already halfway through a week.
+      const already = await store.studentByChat(chatId);
+      if (!already) {
+        await store.upsertStudent({ id: `s${chatId}`, name: AWAITING_NAME, chat_id: chatId });
+      }
+    }
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -157,8 +175,17 @@ const studentCommand = defineChannelCommand({
     // public type, but the handle is the same object.
     const chatId = chatIdFrom((thread as unknown as { conversationKey: string }).conversationKey);
     const studentId = `s${chatId}`;
-    await store.upsertStudent({ id: studentId, name: "Jonas", chat_id: chatId });
-    const plan = await store.latestPlan(studentId);
+    /*
+     * This command is in Telegram's "/" menu, so students tap it out of
+     * curiosity — and it used to overwrite whatever name they gave with the
+     * hardcoded fixture name. A real student then stopped matching the line his
+     * tutor typed about him: "I don't recognise that student. I have: Jonas."
+     * So it names nobody who already has one.
+     */
+    const already = await store.studentByChat(chatId);
+    const name = already?.name.trim() || "Jonas";
+    await store.upsertStudent({ id: already?.id ?? studentId, name, chat_id: chatId });
+    const plan = await store.latestPlan(already?.id ?? studentId);
     await thread.post(
       <Message accent="#F5A623">
         <Section>
@@ -269,21 +296,20 @@ channel.onMessage(async ({ thread, message }) => {
   const text = (message.text ?? "").trim();
   if (!text) return;
 
-  const pending = pendingEnrollments.get(chatId);
-  if (pending) {
+  const student = await store.studentByChat(chatId);
+
+  // Enrolled, but we never got a name — his first message is the name.
+  if (student && !student.name.trim()) {
     const name = text.slice(0, 40).trim();
     if (name.length < 2) {
       await thread.post(<Message accent="#F5A623"><Section><Markdown>Tell me the first name your tutor uses for you.</Markdown></Section></Message>);
       return;
     }
-    const studentId = `s${chatId}`;
-    await store.upsertStudent({ id: studentId, name, chat_id: chatId });
-    pendingEnrollments.delete(chatId);
+    await store.upsertStudent({ id: student.id, name, chat_id: chatId });
     await thread.post(<Message accent="#F5A623"><Section><Markdown>{`You're in, ${name}. I'll practise with you here when your tutor sets your week.`}</Markdown></Section></Message>);
     return;
   }
 
-  const student = await store.studentByChat(chatId);
   if (student) {
     await handleStudentAnswer(thread as never, student.id, text, message);
     return;
@@ -298,7 +324,10 @@ channel.onMessage(async ({ thread, message }) => {
   if (chatId === tutorChat) {
     const studentForLine = await studentNamed(text);
     if (!studentForLine) {
-      const names = Object.values(state.students).map((student) => student.name).join(", ");
+      const names = Object.values(state.students)
+        .map((student) => student.name.trim())
+        .filter(Boolean)
+        .join(", ");
       await thread.post(<Message accent="#16306B"><Section><Markdown>{names ? `I don't recognise that student. I have: ${names}. Start your line with one of those names.` : "No students are enrolled yet. Share the link from `/tutor` first."}</Markdown></Section></Message>);
       return;
     }
