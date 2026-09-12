@@ -38,7 +38,12 @@ export default async function AppLayout({
 
   return (
     <div className="md:flex md:min-h-screen">
-      <aside className="border-b border-line bg-ink-850 md:w-56 md:shrink-0 md:border-b-0 md:border-r">
+      <aside
+        // Sticky on desktop: the roster scrolls, the rail does not. It is
+        // capped at the viewport and scrolls internally only if the nav ever
+        // outgrows the screen, so a long student list never pushes it away.
+        className="border-b border-line bg-ink-850 md:sticky md:top-0 md:h-screen md:max-h-screen md:w-56 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r"
+      >
         <div className="flex items-center justify-between gap-4 px-5 py-4 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-8 md:py-6">
           <Link href="/app" className="flex items-baseline gap-2">
             <span className="font-display text-xl leading-none text-cream">Between</span>

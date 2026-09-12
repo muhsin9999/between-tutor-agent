@@ -14,7 +14,10 @@ const LINKS = [
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/app") return pathname === "/app" || pathname.startsWith("/app/s");
+  // "/app/s" without the trailing slash ALSO matches "/app/settings", which is
+  // why Students stayed lit on the Settings page. The student-detail route is
+  // "/app/s/<id>", so the slash is load-bearing.
+  if (href === "/app") return pathname === "/app" || pathname.startsWith("/app/s/");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
