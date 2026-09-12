@@ -1,141 +1,87 @@
-"use client";
+/**
+ * The root of the deployed panel host.
+ *
+ * This used to be the starter kit's incident-assistant demo — someone else's
+ * project on our live URL. It is the first thing a judge sees, so it says what
+ * Between is and points at the two real surfaces.
+ */
+import Link from "next/link";
 
-import { useCallback, useState } from "react";
-import {
-  CopilotChat,
-  useConfigureSuggestions,
-} from "@copilotkit/react-core/v2";
-import { GenerativeUI } from "@/components/generative-ui";
-import { AppControl } from "@/components/app-control";
-import { findIncident, incidents, workspaceContext } from "@/lib/incidents";
-import { useWorkplace } from "@/lib/use-workplace";
-import { WorkplaceFollowups } from "@/components/workplace-followups";
+export const metadata = {
+  title: "Between",
+  description: "A tutor sends one line. The agent works the six days between lessons.",
+};
 
 export default function Home() {
-  const [selectedId, setSelectedId] = useState<string>(incidents[0].id);
-  const workplace = useWorkplace(selectedId);
-  const { selectedIncident: incident } = workspaceContext(
-    selectedId,
-    workplace.status?.status === "connected" ? workplace.status.tasks : [],
-  );
-  const selectIncident = useCallback((id: string) => {
-    setSelectedId(findIncident(id).id);
-  }, []);
-
-  useConfigureSuggestions(
-    {
-      suggestions: [
-        {
-          title: "Summarize this incident",
-          message:
-            "Summarize the selected incident using the page context. What needs attention?",
-        },
-        {
-          title: "Propose a follow-up",
-          message:
-            "Prepare one useful Ambiguous follow-up for the selected incident. Show me the proposal before it is saved.",
-        },
-      ],
-      available: "before-first-message",
-    },
-    [],
-  );
-
   return (
-    <>
-      <GenerativeUI />
-      <AppControl
-        selectedId={selectedId}
-        selectIncident={selectIncident}
-        workplace={workplace}
-      />
-      <main className="ck-workspace">
-        <header className="ck-workspace-header">
-          <div>
-            <p className="ck-eyebrow">Agents, everywhere · Web example</p>
-            <h1>Incident assistant</h1>
-            <p className="ck-intro">
-              Pick an incident. Ask your assistant. Review a follow-up.
-            </p>
-          </div>
-          <span className="ck-tag">Sample data</span>
-        </header>
+    <main style={shell}>
+      <p style={eyebrow}>Agents, Everywhere &middot; Abuja &middot; 12 Sep 2026</p>
 
-        <div className="ck-workspace-grid">
-          <section className="ck-panel" aria-labelledby="incident-title">
-            <div className="ck-incident-picker">
-              <label htmlFor="incident-select">Incident</label>
-              <select
-                id="incident-select"
-                value={selectedId}
-                onChange={(event) => selectIncident(event.target.value)}
-              >
-                {incidents.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.id} · {item.service}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <h1 style={h1}>Between</h1>
 
-            <div className="ck-detail">
-              <span className="ck-status-label">{incident.status}</span>
-              <h2 id="incident-title">{incident.title}</h2>
-              <p>{incident.summary}</p>
-              <details className="ck-more" key={incident.id}>
-                <summary>Details &amp; timeline</summary>
-                <dl className="ck-detail-facts">
-                  <div>
-                    <dt>Incident lead</dt>
-                    <dd>{incident.owner}</dd>
-                  </div>
-                  <div>
-                    <dt>Severity</dt>
-                    <dd>{incident.severity}</dd>
-                  </div>
-                  <div>
-                    <dt>Last update</dt>
-                    <dd>{incident.updated}</dd>
-                  </div>
-                </dl>
-                <h3>Impact</h3>
-                <p>{incident.impact}</p>
-                <h3>Timeline</h3>
-                <ol className="ck-timeline">
-                  {incident.timeline.map((event) => (
-                    <li key={event.time}>
-                      <time>{event.time} UTC</time>
-                      <div>
-                        <strong>{event.author}</strong>
-                        <p>{event.detail}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            </div>
+      <p style={standfirst}>
+        A tutor&rsquo;s work exists for the fifty-five minutes she&rsquo;s in the room.
+        Then <em style={{ color: "#B0700F", fontStyle: "normal" }}>six dead days</em>,
+        and the next lesson opens with &ldquo;how did it go.&rdquo;
+      </p>
 
-            <WorkplaceFollowups incidentId={selectedId} workplace={workplace} />
-          </section>
+      <p style={body}>
+        She sends <strong>one line</strong> at the end of a lesson. That is the only thing
+        she types all week. The agent plans the six days, works them with her student in
+        plain Telegram chat, and five minutes before the next lesson builds her a briefing
+        panel whose shape comes from what the week actually produced.
+      </p>
 
-          <section
-            className="ck-panel ck-assistant"
-            aria-labelledby="assistant-title"
-          >
-            <header className="ck-assistant-header">
-              <h2 id="assistant-title">Ask assistant</h2>
-              <p>It can read this incident and prepare follow-ups.</p>
-            </header>
-            <CopilotChat
-              className="ck-chat"
-              labels={{
-                welcomeMessageText: "What needs attention?",
-                chatInputPlaceholder: "Ask about this incident…",
-              }}
-            />
-          </section>
-        </div>
-      </main>
-    </>
+      <p style={quote}>
+        Jonas &mdash; German past tense of irregular verbs, ten minutes a day.
+        He&rsquo;s nervous about speaking out loud.
+      </p>
+
+      <div style={row}>
+        <Link href="/panel" style={primary}>The lesson brief</Link>
+        <Link href="/tutor" style={secondary}>All students</Link>
+        <a href="https://t.me/between_tutor_bot" style={secondary}>The bot</a>
+      </div>
+
+      <p style={foot}>
+        The student installs nothing &mdash; no app, no account, no password.
+        He answers in the chat app already on his phone.
+      </p>
+    </main>
   );
 }
+
+const SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const shell: React.CSSProperties = {
+  maxWidth: 620, margin: "0 auto", padding: "56px 20px 80px",
+  background: "#FBF5E6", minHeight: "100vh", fontFamily: SANS, color: "#1C2331",
+};
+const eyebrow: React.CSSProperties = {
+  margin: 0, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8C8578",
+};
+const h1: React.CSSProperties = {
+  margin: "14px 0 0", fontSize: 54, lineHeight: 1, letterSpacing: "-0.02em",
+  color: "#16306B", fontWeight: 600,
+};
+const standfirst: React.CSSProperties = {
+  margin: "22px 0 0", fontSize: 21, lineHeight: 1.45, maxWidth: "30ch", textWrap: "balance",
+};
+const body: React.CSSProperties = {
+  margin: "18px 0 0", fontSize: 16, lineHeight: 1.65, color: "#4A5162", maxWidth: "60ch",
+};
+const quote: React.CSSProperties = {
+  margin: "26px 0 0", padding: "2px 0 2px 16px", borderLeft: "2px solid #F5A623",
+  fontSize: 17, lineHeight: 1.5, fontStyle: "italic", maxWidth: "46ch",
+};
+const row: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 10, margin: "32px 0 0" };
+const primary: React.CSSProperties = {
+  background: "#16306B", color: "#FBF5E6", padding: "11px 18px", borderRadius: 4,
+  textDecoration: "none", fontSize: 15, fontWeight: 600,
+};
+const secondary: React.CSSProperties = {
+  border: "1px solid #DDD6C6", color: "#1C2331", padding: "11px 18px", borderRadius: 4,
+  textDecoration: "none", fontSize: 15, fontWeight: 500,
+};
+const foot: React.CSSProperties = {
+  margin: "34px 0 0", fontSize: 14, lineHeight: 1.6, color: "#6B7280", maxWidth: "52ch",
+};

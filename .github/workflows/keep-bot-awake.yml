@@ -1,0 +1,34 @@
+# Render's free tier spins a service down after ~15 minutes with no inbound
+# HTTP — and a spun-down long-poller receives nothing, so the bot goes silent
+# and looks broken with no error anywhere.
+#
+# server.ts already serves a health check. This hits it every 10 minutes.
+# GitHub-hosted, free, and it lives in the repo rather than in someone's
+# personal cron-job.org account.
+#
+# Note: GitHub often runs scheduled workflows late under load, so the interval
+# is 10 minutes rather than 14 to leave headroom against the 15-minute idle
+# timeout.
+name: Keep the bot awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the Telegram bot
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+              https://between-telegram.onrender.com/ || echo 000)
+            echo "attempt $attempt -> HTTP $code"
+            # A cold start can take ~50s and any response proves it is awake —
+            # the health path is not routed, so 404 is a success here.
+            if [ "$code" != "000" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::warning::bot did not respond after 3 attempts"
