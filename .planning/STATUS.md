@@ -29,7 +29,7 @@ say it out loud. Never reach across.
 | Check | Owner | State | Note |
 |---|---|---|---|
 | A1 transport decided — (a) (b) or (c) | A | ✅ | **(a)** `telegram({ token })` direct, long-polling by default. No tunnel for the bot. |
-| A2 bot + Mini App URL registered | A | ⬜ | |
+| A2 bot + Mini App URL registered | A | ✅ | @between_tutor_bot · id 8608535988 · getMe verified |
 | A3 Telegram Desktop logged in | A | ⬜ | |
 | B1 real completion came back | B | ✅ | openai · gpt-4.1-mini · ~5s |
 | B2 `contracts.ts` typechecks both apps | B | ✅ | 7 tests pin the closed-catalogue + quiet-week rules |
