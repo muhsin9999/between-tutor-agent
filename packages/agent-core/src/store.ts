@@ -148,9 +148,27 @@ export function msPerDay(speed = read().clock.speed): number {
   return match[2] === "ms" ? value : match[2] === "m" ? value * 60_000 : value * 1_000;
 }
 
-export function startClock(speed = process.env.DEMO_SPEED ?? "day:40s"): void {
+export function startClock(
+  speed = process.env.DEMO_SPEED ?? "day:40s",
+  startedAt: Date = new Date(),
+): void {
   update((s) => {
-    s.clock = { started_at: new Date().toISOString(), speed };
+    s.clock = { started_at: startedAt.toISOString(), speed };
+  });
+}
+
+/**
+ * Reset a rehearsal without making the tutor and student enrol again. Plans and
+ * attempts are session state; identities are the one bit worth keeping between
+ * takes. This deliberately also clears seen update ids, otherwise replaying a
+ * scripted Telegram take would be ignored as a duplicate.
+ */
+export function resetDemo(): void {
+  update((s) => {
+    s.plans = [];
+    s.attempts = [];
+    s.seen_updates = [];
+    s.clock = { started_at: new Date(0).toISOString(), speed: process.env.DEMO_SPEED ?? "day:40s" };
   });
 }
 
