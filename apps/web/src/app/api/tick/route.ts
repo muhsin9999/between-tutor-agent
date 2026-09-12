@@ -1,4 +1,4 @@
-import { store } from "agent-core";
+import { persistence as store } from "agent-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,15 +24,11 @@ export async function GET(request: Request) {
   }
 
   const clockNow = now ?? new Date();
-  if (store.currentDay(clockNow) === 0) {
-    store.startClock(process.env.DEMO_SPEED ?? "day:40s", clockNow);
-  }
-
-  const snapshot = store.read();
+  const before = await store.read();
+  if (store.currentDay(clockNow, before) === 0) await store.startClock(process.env.DEMO_SPEED ?? "day:40s", clockNow);
+  const snapshot = await store.read();
   const day = store.currentDay(clockNow, snapshot);
-  const due = Object.values(snapshot.students)
-    .map((student) => ({ student_id: student.id, step: store.dueStep(student.id, clockNow) }))
-    .filter((entry) => entry.step !== null);
+  const due = (await Promise.all(Object.values(snapshot.students).map(async (student) => ({ student_id: student.id, step: await store.dueStep(student.id, clockNow) })))).filter((entry) => entry.step !== null);
 
   return Response.json({
     now: clockNow.toISOString(),
@@ -44,6 +40,6 @@ export async function GET(request: Request) {
 
 /** A clean rehearsal while preserving the tutor/student enrolment. */
 export async function POST() {
-  store.resetDemo();
+  await store.resetDemo();
   return Response.json({ ok: true, preserved: ["students", "tutor"] });
 }
